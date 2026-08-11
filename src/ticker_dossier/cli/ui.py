@@ -5,6 +5,7 @@ import os
 import shutil
 import sys
 import unicodedata
+from dataclasses import dataclass
 from datetime import datetime
 
 from ticker_dossier.cli.command_catalog import specs_by_category
@@ -55,8 +56,84 @@ WELCOME_PANEL_ROWS = [
     ("Commands", ""),
     ("/help", "menu and examples"),
     ("/status", "model, sources, tools"),
+    ("/dashboard", "runtime and saved positions"),
     ("/trace on", "expand execution trace"),
 ]
+
+
+def _sanitize_terminal_data(value: object) -> str:
+    """Flatten untrusted labels so persisted data cannot control the terminal."""
+    safe = "".join(
+        " " if unicodedata.category(char) in {"Cc", "Cf", "Cs"} else char
+        for char in str(value)
+    )
+    return " ".join(safe.split())
+
+
+@dataclass(frozen=True)
+class DashboardHolding:
+    """One position rendered from the prices already saved in the paper ledger."""
+
+    symbol: str
+    shares: float
+    avg_cost: float
+    last_price: float
+    market_value: float
+    weight: float
+    pnl_pct: float
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "symbol", _sanitize_terminal_data(self.symbol))
+
+
+@dataclass(frozen=True)
+class DashboardPortfolio:
+    """Read-only paper-account summary for the terminal dashboard."""
+
+    name: str
+    state: str
+    net_value: float = 0.0
+    initial_cash: float = 0.0
+    cash: float = 0.0
+    pnl: float = 0.0
+    pnl_pct: float = 0.0
+    updated_at: str = ""
+    holdings: tuple[DashboardHolding, ...] = ()
+    conflict: bool = False
+    warning: str = ""
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "name", _sanitize_terminal_data(self.name))
+        object.__setattr__(self, "state", _sanitize_terminal_data(self.state))
+        object.__setattr__(self, "updated_at", _sanitize_terminal_data(self.updated_at))
+        object.__setattr__(self, "warning", _sanitize_terminal_data(self.warning))
+
+
+@dataclass(frozen=True)
+class DashboardSnapshot:
+    """Cached runtime and account state; rendering never performs I/O."""
+
+    model: str
+    backend: str
+    trace: str
+    tools: int
+    skills: int
+    data_sources: int
+    mcp_connected: int
+    mcp_total: int
+    portfolio: DashboardPortfolio
+    source_names: tuple[str, ...] = ()
+    mcp_configured: int = 0
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "model", _sanitize_terminal_data(self.model))
+        object.__setattr__(self, "backend", _sanitize_terminal_data(self.backend))
+        object.__setattr__(self, "trace", _sanitize_terminal_data(self.trace))
+        object.__setattr__(
+            self,
+            "source_names",
+            tuple(_sanitize_terminal_data(name) for name in self.source_names),
+        )
 
 
 def render_welcome(width: int | None = None) -> str:
@@ -98,10 +175,314 @@ def _render_compact_welcome(frame_width: int) -> str:
         _frame_title(" TickerDossier ", inner),
         _frame_line(f"ฅ^•ﻀ•^ฅ  model {model}", inner),
         _frame_line("research only · no auto trading", inner),
-        _frame_line("/help  /status  /trace on", inner),
+        _frame_line("/help  /dashboard  /trace on", inner),
         _color("╰" + "─" * inner + "╯", "gold"),
     ]
     return "\n".join(rows)
+
+
+def render_dashboard(snapshot: DashboardSnapshot, width: int | None = None) -> str:
+    """Render a responsive, static dashboard from an already collected snapshot."""
+    frame_width = _terminal_width(width)
+    lang = current_lang()
+    boundary = (
+        "只读快照 · 使用纸面账本保存价格 · 不联网刷新 · 不执行交易"
+        if lang == "zh"
+        else "READ ONLY · saved paper-ledger prices · no refresh · no trading"
+    )
+    rows = _dashboard_panel(" TickerDossier · Dashboard ", [boundary], frame_width)
+
+    runtime_lines = _dashboard_runtime_lines(snapshot, lang)
+    portfolio_lines = _dashboard_portfolio_lines(snapshot.portfolio, lang)
+    rows.append("")
+    if frame_width >= 88:
+        gap = 2
+        panel_width = (frame_width - gap) // 2
+        line_count = max(len(runtime_lines), len(portfolio_lines))
+        runtime_lines.extend([""] * (line_count - len(runtime_lines)))
+        portfolio_lines.extend([""] * (line_count - len(portfolio_lines)))
+        left = _dashboard_panel(_dashboard_runtime_title(lang), runtime_lines, panel_width)
+        right = _dashboard_panel(_dashboard_portfolio_title(lang), portfolio_lines, panel_width)
+        rows.extend(_join_dashboard_panels(left, right, panel_width, gap))
+    else:
+        rows.extend(_dashboard_panel(_dashboard_runtime_title(lang), runtime_lines, frame_width))
+        rows.append("")
+        rows.extend(
+            _dashboard_panel(
+                _dashboard_portfolio_title(lang),
+                portfolio_lines,
+                frame_width,
+            )
+        )
+
+    rows.append("")
+    rows.extend(_dashboard_positions_panel(snapshot.portfolio, frame_width, lang))
+    if snapshot.portfolio.conflict or snapshot.portfolio.warning:
+        rows.append("")
+        rows.extend(_dashboard_warning_panel(snapshot.portfolio, frame_width, lang))
+    rows.append("")
+    hint = (
+        "/portfolio review 只读刷新估值 · /portfolio mark 才会写入账本"
+        if lang == "zh"
+        else "/portfolio review values in memory · /portfolio mark writes the ledger"
+    )
+    rows.extend(_dashboard_panel(" Quick actions ", [hint], frame_width))
+    return "\n".join(rows)
+
+
+def _dashboard_runtime_lines(snapshot: DashboardSnapshot, lang: str) -> list[str]:
+    source_detail = ", ".join(snapshot.source_names) or ("无真实源" if lang == "zh" else "none")
+    mcp = f"{snapshot.mcp_connected}/{snapshot.mcp_total}"
+    if snapshot.mcp_configured:
+        mcp += " · config only" if lang == "en" else " · 仅检查配置"
+    if lang == "en":
+        return [
+            f"Backend   {snapshot.backend}",
+            f"Model     {snapshot.model}",
+            f"Trace     {snapshot.trace}",
+            f"Tools     {snapshot.tools} · Skills {snapshot.skills}",
+            f"Data      {snapshot.data_sources} · {source_detail}",
+            f"MCP       {mcp}",
+        ]
+    return [
+        f"后端      {snapshot.backend}",
+        f"模型      {snapshot.model}",
+        f"轨迹      {snapshot.trace}",
+        f"工具      {snapshot.tools} · Skills {snapshot.skills}",
+        f"数据源    {snapshot.data_sources} · {source_detail}",
+        f"MCP       {mcp}",
+    ]
+
+
+def _dashboard_portfolio_lines(portfolio: DashboardPortfolio, lang: str) -> list[str]:
+    if portfolio.state == "missing":
+        if lang == "en":
+            return [
+                f"Account   {portfolio.name}",
+                "State     not created",
+                "Create    /portfolio init --account " + portfolio.name,
+            ]
+        return [
+            f"账户      {portfolio.name}",
+            "状态      尚未创建",
+            "创建      /portfolio init --account " + portfolio.name,
+        ]
+    if portfolio.state not in {"ready", "empty"}:
+        if lang == "en":
+            return [
+                f"Account   {portfolio.name}",
+                "State     unavailable",
+                "Next      /portfolio locate " + portfolio.name,
+            ]
+        return [
+            f"账户      {portfolio.name}",
+            "状态      读取失败",
+            "下一步    /portfolio locate " + portfolio.name,
+        ]
+
+    pnl = _color(_dashboard_signed_money(portfolio.pnl), _dashboard_change_color(portfolio.pnl))
+    pnl_pct = _color(
+        _dashboard_signed_percent(portfolio.pnl_pct),
+        _dashboard_change_color(portfolio.pnl_pct),
+    )
+    storage = "CONFLICT" if portfolio.conflict else ("warning" if portfolio.warning else "ok")
+    if lang == "en":
+        return [
+            f"Account   {portfolio.name}",
+            f"Net value {_dashboard_money(portfolio.net_value)}",
+            f"Cash      {_dashboard_money(portfolio.cash)}",
+            f"Return    {pnl} · {pnl_pct}",
+            f"Updated   {portfolio.updated_at or 'unknown'}",
+            f"Storage   {storage}",
+        ]
+    return [
+        f"账户      {portfolio.name}",
+        f"净值      {_dashboard_money(portfolio.net_value)}",
+        f"现金      {_dashboard_money(portfolio.cash)}",
+        f"累计收益  {pnl} · {pnl_pct}",
+        f"账本时间  {portfolio.updated_at or '未知'}",
+        f"存储状态  {'冲突' if portfolio.conflict else ('警告' if portfolio.warning else '正常')}",
+    ]
+
+
+def _dashboard_positions_panel(
+    portfolio: DashboardPortfolio,
+    frame_width: int,
+    lang: str,
+) -> list[str]:
+    title = " Saved positions " if lang == "en" else " 持仓 · 账本保存价格 "
+    if portfolio.state not in {"ready", "empty"}:
+        empty = "No paper account available." if lang == "en" else "没有可展示的纸面账户。"
+        return _dashboard_panel(title, [empty], frame_width)
+    if not portfolio.holdings:
+        empty = "No positions." if lang == "en" else "暂无持仓。"
+        return _dashboard_panel(title, [empty], frame_width)
+
+    content_width = max(frame_width - 4, 1)
+    lines = _dashboard_position_lines(portfolio.holdings, content_width, lang)
+    return _dashboard_panel(title, lines, frame_width)
+
+
+def _dashboard_position_lines(
+    holdings: tuple[DashboardHolding, ...],
+    width: int,
+    lang: str,
+) -> list[str]:
+    visible = holdings[:8]
+    lines: list[str] = []
+    if width >= 83:
+        wide_labels = (
+            ("Symbol", "Shares", "Avg cost", "Saved", "Value", "Weight", "P/L")
+            if lang == "en"
+            else ("标的", "股数", "成本", "账本价", "市值", "权重", "浮盈亏")
+        )
+        wide_widths = (8, 10, 11, 11, 14, 8, 9)
+        lines.append(_dashboard_table_row(wide_labels, wide_widths))
+        lines.append("─" * width)
+        for holding in visible:
+            lines.append(_dashboard_holding_row(holding, wide_widths))
+    elif width >= 50:
+        compact_labels = (
+            ("Symbol", "Shares", "Value", "Weight", "P/L")
+            if lang == "en"
+            else ("标的", "股数", "市值", "权重", "浮盈亏")
+        )
+        compact_widths = (7, 8, 12, 7, 8)
+        lines.append(_dashboard_table_row(compact_labels, compact_widths))
+        lines.append("─" * width)
+        for holding in visible:
+            values = (
+                holding.symbol,
+                _dashboard_quantity(holding.shares),
+                _dashboard_money(holding.market_value),
+                f"{holding.weight * 100:.1f}%",
+                _color(
+                    _dashboard_signed_percent(holding.pnl_pct),
+                    _dashboard_change_color(holding.pnl_pct),
+                ),
+            )
+            lines.append(_dashboard_table_row(values, compact_widths))
+    else:
+        for holding in visible:
+            lines.append(
+                f"{holding.symbol}  {holding.weight * 100:.1f}%  "
+                + _color(
+                    _dashboard_signed_percent(holding.pnl_pct),
+                    _dashboard_change_color(holding.pnl_pct),
+                )
+            )
+            lines.append(
+                f"{_dashboard_quantity(holding.shares)} × "
+                f"{_dashboard_money(holding.last_price)} = "
+                f"{_dashboard_money(holding.market_value)}"
+            )
+    if len(holdings) > len(visible):
+        remaining = len(holdings) - len(visible)
+        lines.append(
+            f"… and {remaining} more; use /portfolio status"
+            if lang == "en"
+            else f"… 另有 {remaining} 个持仓；用 /portfolio status 查看全部"
+        )
+    return lines
+
+
+def _dashboard_holding_row(
+    holding: DashboardHolding,
+    widths: tuple[int, ...],
+) -> str:
+    values = (
+        holding.symbol,
+        _dashboard_quantity(holding.shares),
+        _dashboard_money(holding.avg_cost),
+        _dashboard_money(holding.last_price),
+        _dashboard_money(holding.market_value),
+        f"{holding.weight * 100:.1f}%",
+        _color(
+            _dashboard_signed_percent(holding.pnl_pct),
+            _dashboard_change_color(holding.pnl_pct),
+        ),
+    )
+    return _dashboard_table_row(values, widths)
+
+
+def _dashboard_table_row(values: tuple[str, ...], widths: tuple[int, ...]) -> str:
+    cells = [
+        _pad_display(_truncate_display(value, cell_width), cell_width)
+        for value, cell_width in zip(values, widths)
+    ]
+    return "  ".join(cells).rstrip()
+
+
+def _dashboard_warning_panel(
+    portfolio: DashboardPortfolio,
+    frame_width: int,
+    lang: str,
+) -> list[str]:
+    lines: list[str] = []
+    if portfolio.conflict:
+        lines.append(
+            "CONFLICT: user and workspace ledgers both exist; writes remain locked."
+            if lang == "en"
+            else "冲突：用户级与 workspace 同名账本同时存在；写操作仍保持锁定。"
+        )
+    if portfolio.warning:
+        lines.extend(_wrap_display(portfolio.warning, max(frame_width - 4, 1), max_lines=3))
+    lines.append(
+        f"Inspect with /portfolio locate {portfolio.name}; dashboard never migrates files."
+        if lang == "en"
+        else f"用 /portfolio locate {portfolio.name} 核对；dashboard 不会迁移文件。"
+    )
+    return _dashboard_panel(" Account warning ", lines, frame_width)
+
+
+def _dashboard_panel(title: str, lines: list[str], width: int) -> list[str]:
+    inner = max(width - 2, 1)
+    return [
+        _frame_title(title, inner),
+        *(_frame_line(line, inner) for line in lines),
+        _color("╰" + "─" * inner + "╯", "gold"),
+    ]
+
+
+def _join_dashboard_panels(
+    left: list[str],
+    right: list[str],
+    panel_width: int,
+    gap: int,
+) -> list[str]:
+    spacer = " " * gap
+    return [
+        _pad_display(left_line, panel_width) + spacer + right_line
+        for left_line, right_line in zip(left, right)
+    ]
+
+
+def _dashboard_runtime_title(lang: str) -> str:
+    return " Runtime " if lang == "en" else " 运行状态 "
+
+
+def _dashboard_portfolio_title(lang: str) -> str:
+    return " Paper portfolio " if lang == "en" else " 纸面组合 "
+
+
+def _dashboard_money(value: float) -> str:
+    return f"{value:,.2f}"
+
+
+def _dashboard_signed_money(value: float) -> str:
+    return f"{value:+,.2f}"
+
+
+def _dashboard_signed_percent(value: float) -> str:
+    return f"{value:+.2f}%"
+
+
+def _dashboard_quantity(value: float) -> str:
+    return f"{value:,.0f}" if float(value).is_integer() else f"{value:,.2f}"
+
+
+def _dashboard_change_color(value: float) -> str:
+    return "green" if value >= 0 else "red"
 
 
 def render_help(width: int | None = None) -> str:
@@ -191,7 +572,7 @@ def render_trace_summary(
     tools: list[str],
     *,
     elapsed: float | None = None,
-    usage: dict | None = None,
+    usage: dict[str, int | float] | None = None,
 ) -> str:
     from ticker_dossier.telemetry import format_usage
 

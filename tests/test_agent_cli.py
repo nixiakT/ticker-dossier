@@ -1268,6 +1268,58 @@ def test_main_handles_single_shot_slash_command(capsys: Any) -> None:
     assert "finance_get_quote" in output
 
 
+def test_main_dashboard_flag_closes_runtime(capsys: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    events: list[str] = []
+
+    class Managed:
+        def close(self) -> None:
+            events.append("closed")
+
+    registry = ToolRegistry()
+    registry.manage(Managed())
+    monkeypatch.setattr(
+        "ticker_dossier.cli.main.build_default_registry",
+        lambda **_kwargs: registry,
+    )
+    monkeypatch.setattr("ticker_dossier.cli.main._finance_service", lambda _registry: StatusFinance())
+    monkeypatch.setattr(
+        "ticker_dossier.cli.main.build_agent",
+        lambda *args, **kwargs: pytest.fail("dashboard should not build a model agent"),
+    )
+
+    assert main(["--dashboard"]) == 0
+
+    output = capsys.readouterr().out
+    assert "TickerDossier · Dashboard" in output
+    assert "只读快照" in output
+    assert events == ["closed"]
+
+
+def test_main_routes_named_dashboard_account(capsys: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "ticker_dossier.cli.main.build_default_registry",
+        lambda **_kwargs: ToolRegistry(),
+    )
+    monkeypatch.setattr("ticker_dossier.cli.main._finance_service", lambda _registry: StatusFinance())
+
+    assert main(["/dashboard", "--account", "growth"]) == 0
+
+    output = capsys.readouterr().out
+    assert "growth" in output
+    assert "尚未创建" in output
+
+
+@pytest.mark.parametrize(
+    "argv",
+    (["--dashboard", "--account="], ["--selfcheck", "--account", "growth"]),
+)
+def test_main_rejects_account_without_a_dashboard_or_name(argv: list[str]) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        main(argv)
+
+    assert exc_info.value.code == 2
+
+
 def test_main_handles_single_shot_slash_command_with_args(capsys: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     import ticker_dossier.tools.web_tools as web_tools
 

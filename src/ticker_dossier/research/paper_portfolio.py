@@ -84,6 +84,7 @@ DEFAULT_PORTFOLIO_DIR = Path(
     os.getenv("FINANCE_PORTFOLIO_DIR", Path.home() / ".finance-agent" / "portfolios")
 ).expanduser()
 PORTFOLIO_DIR = DEFAULT_PORTFOLIO_DIR
+_IMPORTED_PORTFOLIO_DIR = PORTFOLIO_DIR
 DEFAULT_ACCOUNT = "default"
 
 
@@ -107,7 +108,7 @@ def account_path(name: str = DEFAULT_ACCOUNT, base_dir: Path | None = None) -> P
 
 def inspect_account_locations(name: str = DEFAULT_ACCOUNT) -> AccountLocations:
     """Inspect both supported locations without creating or copying anything."""
-    user_path = _account_path_in(PORTFOLIO_DIR, name)
+    user_path = _account_path_in(_configured_portfolio_dir(), name)
     workspace_path = _account_path_in(LEGACY_PORTFOLIO_DIR, name)
     same_path = user_path == workspace_path
     return AccountLocations(
@@ -638,11 +639,24 @@ def _ensure_safe_write(name: str, base_dir: Path | None) -> None:
 
 
 def _origin_for_path(path: Path) -> str:
-    if path == _account_path_in(PORTFOLIO_DIR, path.stem.removeprefix("portfolio_")):
+    if path == _account_path_in(
+        _configured_portfolio_dir(),
+        path.stem.removeprefix("portfolio_"),
+    ):
         return "user"
     if path == _account_path_in(LEGACY_PORTFOLIO_DIR, path.stem.removeprefix("portfolio_")):
         return "workspace"
     return "custom"
+
+
+def _configured_portfolio_dir() -> Path:
+    """Resolve late-loaded env while preserving an explicit in-process override."""
+    if PORTFOLIO_DIR != _IMPORTED_PORTFOLIO_DIR:
+        return PORTFOLIO_DIR
+    configured = os.getenv("FINANCE_PORTFOLIO_DIR", "").strip()
+    if configured:
+        return Path(configured).expanduser()
+    return PORTFOLIO_DIR
 
 
 def _legacy_account_id(data: dict[str, Any]) -> str:

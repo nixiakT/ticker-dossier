@@ -2,6 +2,7 @@
 
 用法：
   ticker-dossier --selfcheck
+  ticker-dossier --dashboard
   ticker-dossier "分析 AAPL 最近三个月走势"
 """
 from __future__ import annotations
@@ -479,12 +480,27 @@ def interactive() -> int:
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="ticker-dossier")
     p.add_argument("task", nargs="*", help="要让 agent 完成的任务（自然语言）")
-    p.add_argument("--selfcheck", action="store_true", help="只做骨架自检")
-    args = p.parse_args(argv)
+    modes = p.add_mutually_exclusive_group()
+    modes.add_argument("--selfcheck", action="store_true", help="只做骨架自检")
+    modes.add_argument("--dashboard", action="store_true", help="显示只读终端仪表盘")
+    p.add_argument("--account", help="为 dashboard 或 portfolio 指定纸面账户")
+    args = p.parse_intermixed_args(argv)
 
+    account = args.account.strip() if args.account is not None else None
+    if args.account is not None and not account:
+        p.error("--account 不能为空")
+    if args.selfcheck and account is not None:
+        p.error("--account 只适用于 --dashboard、/dashboard 或 /portfolio")
     if args.selfcheck:
         return selfcheck()
-    task = " ".join(args.task).strip()
+    if args.dashboard and args.task:
+        p.error("--dashboard 不接受任务参数；可搭配 --account name 指定账户")
+    task = "/dashboard" if args.dashboard else " ".join(args.task).strip()
+    if account is not None:
+        command = task.split(maxsplit=1)[0].lower() if task else ""
+        if command not in {"/dashboard", "/portfolio"}:
+            p.error("--account 只适用于 --dashboard、/dashboard 或 /portfolio")
+        task += " --account " + shlex.quote(account)
     if not task:
         return interactive()
     if task.lower() in {"/help", "help"}:
@@ -496,7 +512,8 @@ def main(argv: list[str] | None = None) -> int:
         if task.lower() == "/trace":
             print(TracePrinter(lambda: "compact").render_details())
             return 0
-        reg = build_default_registry()
+        command_name = task.split(maxsplit=1)[0].lower()
+        reg = build_default_registry(connect_mcp=command_name != "/dashboard")
         trace = TracePrinter(lambda: "compact")
         try:
             dynamic = DynamicSlashCommands(reg)

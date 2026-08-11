@@ -47,6 +47,14 @@ _COMMANDS = (
     CommandSpec("help", "/help", "查看命令菜单", "show command menu", "session", "session.help"),
     CommandSpec("status", "/status", "查看模型、数据、Skill 和 MCP 状态", "show runtime status", "session", "session.status"),
     CommandSpec(
+        "dashboard",
+        "/dashboard",
+        "查看只读运行状态与纸面持仓仪表盘（可用 --account name）",
+        "show a read-only dashboard (optional: --account name)",
+        "session",
+        "session.dashboard",
+    ),
+    CommandSpec(
         "trace",
         "/trace",
         "展开或切换执行轨迹",

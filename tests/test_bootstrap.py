@@ -65,6 +65,53 @@ def test_registry_binds_finance_tools_to_application_service(monkeypatch) -> Non
     assert getattr(quote.run, "__self__", None) is finance
 
 
+def test_read_only_registry_inspects_mcp_without_starting_it(monkeypatch) -> None:  # noqa: ANN001
+    events: list[str] = []
+    finance = FinanceResearchAgent(provider=ProviderChain(providers=[]))
+
+    monkeypatch.setattr(
+        mcp_client,
+        "connect_project_mcp",
+        lambda registry: pytest.fail("read-only registry started MCP"),
+    )
+    monkeypatch.setattr(
+        mcp_client,
+        "inspect_project_mcp",
+        lambda registry: events.append("inspected"),
+    )
+
+    registry = build_default_registry(
+        ResearchServices(finance=finance),
+        connect_mcp=False,
+    )
+
+    assert events == ["inspected"]
+    assert not any(name.startswith("mcp__") for name in registry.names())
+
+
+def test_registry_closes_owned_services_when_assembly_fails(monkeypatch) -> None:  # noqa: ANN001
+    events: list[str] = []
+    finance = FinanceResearchAgent(provider=ProviderChain(providers=[]))
+    services = ResearchServices(finance=finance)
+    monkeypatch.setattr(finance, "close", lambda: events.append("closed"))
+    monkeypatch.setattr(bootstrap_module, "build_research_services", lambda: services)
+    monkeypatch.setattr(
+        mcp_client,
+        "inspect_project_mcp",
+        lambda registry: (_ for _ in ()).throw(RuntimeError("inspection failed")),
+    )
+
+    with pytest.raises(RuntimeError, match="inspection failed"):
+        build_default_registry(connect_mcp=False)
+
+    assert events == ["closed"]
+
+    with pytest.raises(RuntimeError, match="inspection failed"):
+        build_default_registry(services, connect_mcp=False)
+
+    assert events == ["closed"]
+
+
 def test_finance_agent_closes_only_its_self_created_provider(monkeypatch) -> None:  # noqa: ANN001
     events: list[str] = []
     owned_provider = ClosableProvider(events, "owned")

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import os
+from importlib.util import find_spec
 
 from ticker_dossier.integrations.market_data import (
     AKShareProvider,
@@ -25,6 +26,7 @@ def build_default_providers(
     """Build adapters and the matching diagnostics from one configuration snapshot."""
     alpha = AlphaVantageProvider()
     tushare = TushareProvider()
+    akshare_available = find_spec("akshare") is not None
     diagnostics = [
         {
             "name": alpha.name,
@@ -38,8 +40,12 @@ def build_default_providers(
         },
         {
             "name": "AKShare",
-            "status": "enabled",
-            "detail": "A/HK/US public financial indicators; A-share quote/history/news",
+            "status": "enabled" if akshare_available else "disabled",
+            "detail": (
+                "A/HK/US public financial indicators; A-share quote/history/news"
+                if akshare_available
+                else "install ticker-dossier[providers] to enable"
+            ),
         },
         {
             "name": "Yahoo Finance public endpoints",
@@ -57,7 +63,9 @@ def build_default_providers(
         providers.append(alpha)
     if tushare.available():
         providers.append(tushare)
-    providers.extend([AKShareProvider(), YahooFinanceProvider()])
+    if akshare_available:
+        providers.append(AKShareProvider())
+    providers.append(YahooFinanceProvider())
     if sample_fallback:
         providers.append(SampleDataProvider())
     owned_providers: list[MarketDataProvider] = [

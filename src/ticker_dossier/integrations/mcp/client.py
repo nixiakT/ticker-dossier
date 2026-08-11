@@ -23,6 +23,7 @@ from ticker_dossier.integrations.mcp.config import (
     _validate_mcp_name,
 )
 from ticker_dossier.integrations.mcp.runtime import (
+    MCPInspection,
     MCPRuntime,
     _client_from_spec,
     _discover_prompts,
@@ -32,6 +33,7 @@ from ticker_dossier.integrations.mcp.runtime import (
     _tool_runner,
     connect_project_mcp,
     default_echo_client,
+    inspect_project_mcp,
     register_mcp_tools,
 )
 from ticker_dossier.integrations.mcp.transport import _EOF, MCPClient, MCPRPCError
@@ -47,6 +49,7 @@ __all__ = [
     "TRUSTED_PROJECT_MCP_ENV",
     "MCPClient",
     "MCPConfigError",
+    "MCPInspection",
     "MCPRPCError",
     "MCPRuntime",
     "_EOF",
@@ -64,5 +67,6 @@ __all__ = [
     "_validate_mcp_name",
     "connect_project_mcp",
     "default_echo_client",
+    "inspect_project_mcp",
     "register_mcp_tools",
 ]

@@ -183,6 +183,7 @@ CLI 内部有三条可观察路径：
 - Markdown 命令、项目 Skill 和 MCP prompt 先展开为普通用户内容，再走同一 Agent 路径；它们不获得 system 权限。
 - 内置 slash command 由 `command_catalog.CommandSpec.handler_key` 定位 handler；`HANDLER_METHODS` 必须与 catalog 完全对应，`CommandRouter` 启动时会拒绝缺失或孤立 handler。
 - handler 按 session、research、portfolio、integrations 和 workflow 分组，直接调用确定性能力，适合诊断和可重复操作；帮助和补全仍读取同一 catalog。
+- `/dashboard` 与 `--dashboard` 只组装缓存运行状态和纸面账本 view model，再交给宽度感知 renderer；renderer 不访问 Provider、网络或持久状态。
 - 只有第一次模型请求在任何工具执行前失败时，金融任务才允许使用确定性兜底；后续失败不自动重放，避免重复副作用。
 
 ## 运行时契约
@@ -289,7 +290,8 @@ MCP 按职责拆成四层：
 3. `/portfolio migrate [name]` 是显式的 workspace → 用户级迁移；目标已存在即拒绝。源文件先移动到带时间戳的 recovery backup，目标写入失败会恢复源文件。
 4. 两个位置同时存在同名账户时，读取会明确显示冲突并使用用户级文件；`init`、`mark`、`sell`、`rebalance`、保存和迁移等所有写路径统一抛出 `PortfolioConflictError`。
 5. `/portfolio review` 将最新成功行情复制到内存中的账户快照，标记每个价格的来源与时间；失败标的显式回退到账户记录价。该估值不会更新 JSON、交易流水或历史记录。
-6. `/portfolio mark` 才是显式写入最新价格与账户历史的操作。
+6. `/dashboard [--account name]` 只读取账本已保存价格，不创建账户、不刷新行情、不迁移文件；冲突时仍展示只读快照并保持写锁。
+7. `/portfolio mark` 才是显式写入最新价格与账户历史的操作。
 
 测试传入显式 `base_dir` 时使用隔离存储，不扫描真实用户目录；生产默认路径才应用双位置冲突锁。
 
@@ -391,8 +393,9 @@ python -m mypy --strict \
   src/ticker_dossier/llm/{deepseek,fake}.py \
   src/ticker_dossier/integrations/market_data \
   src/ticker_dossier/integrations/mcp \
-  src/ticker_dossier/cli/{command_types,command_catalog,custom_commands,dynamic_commands}.py
+  src/ticker_dossier/cli/{command_types,command_catalog,custom_commands,dynamic_commands,ui}.py
 ticker-dossier --selfcheck
+ticker-dossier --dashboard
 python -m ticker_dossier /security
 python -m ticker_dossier /mcp
 python -m build

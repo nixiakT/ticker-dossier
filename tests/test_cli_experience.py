@@ -25,8 +25,54 @@ from ticker_dossier.cli.input import (
     _sanitize_hint,
     clean_user_input,
 )
-from ticker_dossier.cli.ui import _display_width, render_help, render_status_bar, render_tool_card, render_welcome
+from ticker_dossier.cli.ui import (
+    DashboardHolding,
+    DashboardPortfolio,
+    DashboardSnapshot,
+    _display_width,
+    render_dashboard,
+    render_help,
+    render_status_bar,
+    render_tool_card,
+    render_welcome,
+)
 from ticker_dossier.runtime.tools import ToolRegistry
+
+
+def _dashboard_snapshot(portfolio: DashboardPortfolio | None = None) -> DashboardSnapshot:
+    if portfolio is None:
+        portfolio = DashboardPortfolio(
+            name="default",
+            state="ready",
+            net_value=123_456.78,
+            initial_cash=100_000.0,
+            cash=23_456.78,
+            pnl=23_456.78,
+            pnl_pct=23.46,
+            updated_at="2026-08-11T10:30:00+08:00",
+            holdings=(
+                DashboardHolding(
+                    symbol="AAPL",
+                    shares=400.0,
+                    avg_cost=210.0,
+                    last_price=250.0,
+                    market_value=100_000.0,
+                    weight=0.81,
+                    pnl_pct=19.05,
+                ),
+            ),
+        )
+    return DashboardSnapshot(
+        model="deepseek-chat",
+        backend="DeepSeekBackend",
+        trace="compact",
+        tools=42,
+        skills=3,
+        data_sources=2,
+        mcp_connected=1,
+        mcp_total=2,
+        portfolio=portfolio,
+    )
 
 
 def test_command_catalog_drives_missing_completions() -> None:
@@ -38,6 +84,8 @@ def test_command_catalog_drives_missing_completions() -> None:
     assert "/export-report AAPL 3mo reports/aapl.md" in completions
     assert "/think compact" not in completions
     assert "/skills" in completions
+    assert any(completion.startswith("/dashboard") for completion in completions)
+    assert resolve_command("/dashboard") is not None
     assert len({spec.name for spec in command_specs()}) == len(command_specs())
 
 
@@ -224,6 +272,246 @@ def test_welcome_adapts_to_small_and_large_terminals(monkeypatch) -> None:  # no
     wide = render_welcome(width=100)
     assert "招财进宝符" in wide
     assert "Available Tools" in wide
+
+
+@pytest.mark.parametrize("width", (20, 60, 100))
+def test_dashboard_is_width_safe_and_honors_no_color(monkeypatch, width: int) -> None:  # noqa: ANN001
+    monkeypatch.setenv("NO_COLOR", "1")
+    monkeypatch.setenv("TICKER_DOSSIER_LANG", "zh")
+
+    output = render_dashboard(_dashboard_snapshot(), width=width)
+
+    assert output
+    assert "\033[" not in output
+    assert max(_display_width(line) for line in output.splitlines()) <= width
+
+
+def test_dashboard_wide_view_shows_portfolio_and_holdings(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setenv("NO_COLOR", "1")
+    monkeypatch.setenv("TICKER_DOSSIER_LANG", "zh")
+
+    output = render_dashboard(_dashboard_snapshot(), width=100)
+
+    assert "净值" in output
+    assert "持仓" in output
+    assert "AAPL" in output
+
+
+def test_dashboard_empty_portfolio_has_an_explicit_state(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setenv("NO_COLOR", "1")
+    monkeypatch.setenv("TICKER_DOSSIER_LANG", "zh")
+    portfolio = DashboardPortfolio(name="empty", state="empty")
+
+    output = render_dashboard(_dashboard_snapshot(portfolio), width=60)
+
+    assert "empty" in output
+    assert "暂无持仓" in output
+
+
+def test_dashboard_command_never_creates_a_missing_account() -> None:
+    from ticker_dossier.research.paper_portfolio import inspect_account_locations
+
+    class Provider:
+        def diagnostics(self) -> list[dict[str, str]]:
+            return []
+
+    class Finance:
+        provider = Provider()
+
+    locations = inspect_account_locations("ghost")
+    router = CommandRouter(ToolRegistry(), finance_agent=Finance())  # type: ignore[arg-type]
+
+    output = router.handle("/dashboard --account ghost").output
+
+    assert "尚未创建" in output
+    assert "ghost" in output
+    assert not locations.user_path.exists()
+    assert not locations.workspace_path.exists()
+
+
+def test_dashboard_command_reports_conflict_without_mutating_ledgers() -> None:
+    from ticker_dossier.research.paper_portfolio import (
+        create_account,
+        inspect_account_locations,
+        save_account,
+    )
+    from ticker_dossier.research.portfolio.models import Holding
+
+    class Provider:
+        def diagnostics(self) -> list[dict[str, str]]:
+            return [{"name": "STATIC", "status": "enabled", "detail": ""}]
+
+    class Finance:
+        provider = Provider()
+
+    account = create_account(initial_cash=1_000, name="default")
+    account.cash = 500
+    account.updated_at = "2026-08-11T10:00:00Z"
+    account.holdings = [Holding("AAPL", 2, 100, 110, 220, 0.31)]
+    save_account(account)
+    locations = inspect_account_locations("default")
+    locations.workspace_path.parent.mkdir(parents=True, exist_ok=True)
+    locations.workspace_path.write_bytes(locations.user_path.read_bytes())
+    before = {
+        path: (path.read_bytes(), path.stat().st_mtime_ns)
+        for path in (locations.user_path, locations.workspace_path)
+    }
+
+    router = CommandRouter(ToolRegistry(), finance_agent=Finance())  # type: ignore[arg-type]
+    output = router.handle("/dashboard").output
+
+    assert "AAPL" in output
+    assert "冲突" in output
+    assert "不联网刷新" in output
+    assert {
+        path: (path.read_bytes(), path.stat().st_mtime_ns)
+        for path in (locations.user_path, locations.workspace_path)
+    } == before
+
+
+def test_dashboard_contains_a_corrupt_ledger_as_an_error_panel() -> None:
+    from ticker_dossier.research.paper_portfolio import inspect_account_locations
+
+    class Provider:
+        def diagnostics(self) -> list[dict[str, str]]:
+            return []
+
+    class Finance:
+        provider = Provider()
+
+    locations = inspect_account_locations("broken")
+    locations.user_path.parent.mkdir(parents=True, exist_ok=True)
+    locations.user_path.write_text("[]", encoding="utf-8")
+
+    output = CommandRouter(
+        ToolRegistry(),
+        finance_agent=Finance(),  # type: ignore[arg-type]
+    ).handle("/dashboard --account broken").output
+
+    assert "读取失败" in output
+    assert "AttributeError" in output
+    assert locations.user_path.read_text(encoding="utf-8") == "[]"
+
+
+def test_dashboard_keeps_conflict_visible_when_the_active_ledger_is_corrupt() -> None:
+    from ticker_dossier.research.paper_portfolio import inspect_account_locations
+
+    class Provider:
+        def diagnostics(self) -> list[dict[str, str]]:
+            return []
+
+    class Finance:
+        provider = Provider()
+
+    locations = inspect_account_locations("broken-conflict")
+    locations.user_path.parent.mkdir(parents=True, exist_ok=True)
+    locations.workspace_path.parent.mkdir(parents=True, exist_ok=True)
+    locations.user_path.write_text("[]", encoding="utf-8")
+    locations.workspace_path.write_text("{}", encoding="utf-8")
+    before = (locations.user_path.read_bytes(), locations.workspace_path.read_bytes())
+
+    output = CommandRouter(
+        ToolRegistry(),
+        finance_agent=Finance(),  # type: ignore[arg-type]
+    ).handle("/dashboard --account broken-conflict").output
+
+    assert "读取失败" in output
+    assert "冲突" in output
+    assert (locations.user_path.read_bytes(), locations.workspace_path.read_bytes()) == before
+
+
+def test_dashboard_contains_unexpected_reader_failures(monkeypatch) -> None:  # noqa: ANN001
+    import ticker_dossier.cli.handlers.session as session_handlers
+    from ticker_dossier.research.paper_portfolio import inspect_account_locations
+
+    class Provider:
+        def diagnostics(self) -> list[dict[str, str]]:
+            return []
+
+    class Finance:
+        provider = Provider()
+
+    locations = inspect_account_locations("deep")
+    locations.user_path.parent.mkdir(parents=True, exist_ok=True)
+    locations.user_path.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(
+        session_handlers,
+        "load_account",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RecursionError("too deep")),
+    )
+
+    output = CommandRouter(
+        ToolRegistry(),
+        finance_agent=Finance(),  # type: ignore[arg-type]
+    ).handle("/dashboard --account deep").output
+
+    assert "读取失败" in output
+    assert "RecursionError" in output
+
+
+def test_dashboard_rejects_non_finite_ledger_values_without_writing() -> None:
+    from ticker_dossier.research.paper_portfolio import inspect_account_locations
+
+    class Provider:
+        def diagnostics(self) -> list[dict[str, str]]:
+            return []
+
+    class Finance:
+        provider = Provider()
+
+    locations = inspect_account_locations("overflow")
+    locations.user_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = (
+        '{"name":"overflow","initial_cash":1000,"cash":0,"holdings":['
+        '{"symbol":"AAPL","shares":1e309,"avg_cost":10,"last_price":11,'
+        '"market_value":0,"weight":0}]}'
+    )
+    locations.user_path.write_text(payload, encoding="utf-8")
+    before = (locations.user_path.read_bytes(), locations.user_path.stat().st_mtime_ns)
+
+    output = CommandRouter(
+        ToolRegistry(),
+        finance_agent=Finance(),  # type: ignore[arg-type]
+    ).handle("/dashboard --account overflow").output
+
+    assert "读取失败" in output
+    assert "ValueError" in output
+    assert (locations.user_path.read_bytes(), locations.user_path.stat().st_mtime_ns) == before
+
+
+def test_dashboard_sanitizes_control_sequences_from_persisted_labels(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setenv("NO_COLOR", "1")
+    malicious = DashboardPortfolio(
+        name="default\nFORGED",
+        state="ready",
+        updated_at="now\033[2Jcleared",
+        holdings=(
+            DashboardHolding("AAPL\033]0;owned\a\ud800", 1, 10, 11, 11, 1, 10),
+        ),
+    )
+
+    output = render_dashboard(_dashboard_snapshot(malicious), width=60)
+
+    assert "\033" not in output
+    assert "\a" not in output
+    assert "\ud800" not in output
+    assert "default FORGED" in output
+    assert max(_display_width(line) for line in output.splitlines()) <= 60
+
+
+def test_dashboard_resolves_a_portfolio_dir_loaded_after_module_import(
+    tmp_path,
+    monkeypatch,
+) -> None:  # noqa: ANN001
+    import ticker_dossier.research.paper_portfolio as portfolio
+
+    configured = tmp_path / "late-config" / "portfolios"
+    monkeypatch.setattr(portfolio, "PORTFOLIO_DIR", portfolio._IMPORTED_PORTFOLIO_DIR)
+    monkeypatch.setenv("FINANCE_PORTFOLIO_DIR", str(configured))
+
+    locations = portfolio.inspect_account_locations("late")
+
+    assert locations.user_path.parent == configured
 
 
 def test_help_is_catalog_backed_and_compact(monkeypatch) -> None:  # noqa: ANN001

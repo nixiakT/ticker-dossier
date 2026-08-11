@@ -80,12 +80,19 @@ ticker-dossier /compare NVDA AMD 1y
 ticker-dossier /debate NVDA AMD 1y
 ticker-dossier /backtest TSLA 20 60 2y
 
+# 一次性只读终端快照（默认或指定纸面账户）
+ticker-dossier --dashboard
+ticker-dossier /dashboard
+ticker-dossier /dashboard --account growth
+
 # 只会写入纸面记录，不会真实下单
 ticker-dossier /portfolio init 100000 AAPL MSFT NVDA
 ticker-dossier /portfolio locate default
 ticker-dossier /portfolio review
 ticker-dossier /predict list
 ```
+
+`--dashboard` 与 `/dashboard [--account name]` 显示一次性只读终端快照，包括运行状态、默认或指定纸面组合及其持仓。快照只使用账本中已保存的价格：不会联网刷新行情、不会自动执行 `mark`、不会写入任何文件，也不代表券商中的真实持仓。若发现同名账户位置冲突，快照会提示冲突，但不会迁移账户。
 
 `/portfolio review` 用最新可得行情在内存中估值，不写回账本；旧 workspace 账户可在核对位置和备份后用 `/portfolio migrate default` 显式迁移，目标已存在时会拒绝覆盖或合并。
 
@@ -153,6 +160,7 @@ src/ticker_dossier/
 | `/financials AAPL`、`/news AAPL 5` | 基本面与相关新闻 |
 | `/quality AAPL 1y`、`/report AAPL 1y` | 质量门禁与研究档案 |
 | `/compare NVDA AMD 1y`、`/debate NVDA AMD 1y` | 同口径对比与多视角审查 |
+| `--dashboard`、`/dashboard [--account name]` | 一次性只读运行状态与纸面持仓快照 |
 | `/portfolio status\|review\|locate\|migrate`、`/predict list` | 纸面组合、位置迁移与预测账本 |
 | `/skills`、`/mcp`、`/tools` | 扩展能力与工具诊断 |
 | `/trace on\|off`、`/trace` | 执行轨迹控制与回看 |
@@ -203,7 +211,7 @@ python -m mypy --strict \
   src/ticker_dossier/llm/{deepseek,fake}.py \
   src/ticker_dossier/integrations/market_data \
   src/ticker_dossier/integrations/mcp \
-  src/ticker_dossier/cli/{command_types,command_catalog,custom_commands,dynamic_commands}.py
+  src/ticker_dossier/cli/{command_types,command_catalog,custom_commands,dynamic_commands,ui}.py
 python -m compileall -q src/ticker_dossier evals
 python -m ticker_dossier --selfcheck
 python -m build

@@ -59,6 +59,16 @@ class MCPRuntime:
             client.close()
 
 
+@dataclass(frozen=True)
+class MCPInspection:
+    """Static MCP configuration status that never starts a configured command."""
+
+    rows: tuple[dict[str, str], ...]
+
+    def statuses(self) -> list[dict[str, str]]:
+        return [dict(row) for row in self.rows]
+
+
 def default_echo_client() -> MCPClient:
     return MCPClient(
         [sys.executable, "-m", "ticker_dossier.integrations.mcp.echo_server"],
@@ -197,6 +207,39 @@ def connect_project_mcp(
         runtime.prompts.extend(discovered_prompts)
     runtime.prompts.sort(key=lambda item: (item["server"], item["name"]))
     return runtime
+
+
+def inspect_project_mcp(
+    registry: ToolRegistry,
+    config_path: str | Path | None = None,
+) -> MCPInspection:
+    """Expose configured server names without starting subprocesses or discovery."""
+    path = _default_mcp_config_path() if config_path is None else Path(config_path)
+    rows: list[dict[str, str]] = []
+    if path.exists():
+        try:
+            configs, errors = _load_project_configs(path)
+            rows.extend(errors)
+            rows.extend({
+                "name": config.name,
+                "status": "configured",
+                "detail": "not started by read-only dashboard",
+            } for config in configs)
+        except Exception as exc:  # noqa: BLE001 - configuration errors belong in status
+            rows.append({
+                "name": "config",
+                "status": "error",
+                "detail": str(exc),
+            })
+    else:
+        rows.append({
+            "name": "echo",
+            "status": "configured",
+            "detail": "packaged fallback; not started by read-only dashboard",
+        })
+    inspection = MCPInspection(tuple(rows))
+    registry.manage(inspection)
+    return inspection
 
 
 def _discover_prompts(client: MCPClient) -> list[dict[str, Any]]:

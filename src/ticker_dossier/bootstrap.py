@@ -126,9 +126,16 @@ def _positive_float_env(name: str, default: float) -> float:
     return value if value > 0 else default
 
 
-def build_default_registry(services: ResearchServices | None = None) -> ToolRegistry:
-    """Create the complete built-in tool registry and connect project MCP."""
-    from ticker_dossier.integrations.mcp.client import connect_project_mcp
+def build_default_registry(
+    services: ResearchServices | None = None,
+    *,
+    connect_mcp: bool = True,
+) -> ToolRegistry:
+    """Create built-in tools, optionally inspecting MCP without starting it."""
+    from ticker_dossier.integrations.mcp.client import (
+        connect_project_mcp,
+        inspect_project_mcp,
+    )
     from ticker_dossier.tools.evolution_tools import build_evolution_tools
     from ticker_dossier.tools.finance_tools import build_finance_tools
     from ticker_dossier.tools.fs import read_tool, write_tool
@@ -144,29 +151,39 @@ def build_default_registry(services: ResearchServices | None = None) -> ToolRegi
     owns_services = services is None
     active_services = build_research_services() if services is None else services
     registry = ToolRegistry()
-    if owns_services:
-        registry.manage(active_services)
-    registry.provide_service("research", active_services)
-    for tool in (
-        read_tool,
-        write_tool,
-        bash_tool,
-        edit_tool,
-        grep_tool,
-        glob_tool,
-        task_list_tool,
-        *memory_tools,
-        read_skill_tool,
-        *build_finance_tools(active_services.finance),
-        *build_evolution_tools(active_services.finance),
-        *trace2skill_tools,
-        *web_tools,
-        *build_scheduler_tools(active_services.finance),
-        *wechat_tools,
-    ):
-        registry.register(tool)
-    connect_project_mcp(registry)
-    return registry
+    try:
+        if owns_services:
+            registry.manage(active_services)
+        registry.provide_service("research", active_services)
+        for tool in (
+            read_tool,
+            write_tool,
+            bash_tool,
+            edit_tool,
+            grep_tool,
+            glob_tool,
+            task_list_tool,
+            *memory_tools,
+            read_skill_tool,
+            *build_finance_tools(active_services.finance),
+            *build_evolution_tools(active_services.finance),
+            *trace2skill_tools,
+            *web_tools,
+            *build_scheduler_tools(active_services.finance),
+            *wechat_tools,
+        ):
+            registry.register(tool)
+        if connect_mcp:
+            connect_project_mcp(registry)
+        else:
+            inspect_project_mcp(registry)
+        return registry
+    except BaseException as exc:
+        try:
+            registry.close()
+        except Exception as close_exc:  # noqa: BLE001 - preserve the assembly failure
+            exc.add_note(f"registry cleanup also failed: {close_exc}")
+        raise
 
 
 def build_agent(

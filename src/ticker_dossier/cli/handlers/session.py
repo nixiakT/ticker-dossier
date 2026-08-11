@@ -1,10 +1,26 @@
 """Session lifecycle, help, status, and observability command handlers."""
 from __future__ import annotations
 
+import math
 import os
 
 from ticker_dossier.cli.command_types import CommandResult, HandlerResult
-from ticker_dossier.cli.ui import current_lang, render_help
+from ticker_dossier.cli.ui import (
+    DashboardHolding,
+    DashboardPortfolio,
+    DashboardSnapshot,
+    current_lang,
+    render_dashboard,
+    render_help,
+)
+from ticker_dossier.config import load_local_env
+from ticker_dossier.research.paper_portfolio import (
+    PortfolioNotFoundError,
+    inspect_account_locations,
+    load_account,
+    portfolio_value,
+)
+from ticker_dossier.research.portfolio.models import PortfolioAccount
 from ticker_dossier.security import safety_summary
 from ticker_dossier.skills.loader import load_skills
 
@@ -23,6 +39,7 @@ SESSION_HANDLER_METHODS = {
     "session.tools": "handle_tools",
     "session.skills": "handle_skills",
     "session.status": "handle_status",
+    "session.dashboard": "handle_dashboard",
     "session.security": "handle_security",
 }
 
@@ -106,6 +123,48 @@ class SessionCommandHandlers:
             "- 边界: research only, no auto trading",
         ])
 
+    def handle_dashboard(self, args: list[str], think_enabled: str | bool) -> HandlerResult:
+        """Render one read-only snapshot without refreshing or creating an account."""
+        account_name = _dashboard_account_name(args)
+        load_local_env()
+        try:
+            diagnostics = self.finance.provider.diagnostics()
+        except Exception:  # noqa: BLE001 - dashboard remains useful when one adapter is broken
+            diagnostics = []
+        source_names = tuple(
+            str(row.get("name", "unknown"))
+            for row in diagnostics
+            if row.get("status") == "enabled"
+            and "SAMPLE" not in str(row.get("name", "")).upper()
+        )
+        try:
+            skill_count = len(load_skills())
+        except Exception:
+            skill_count = 0
+        try:
+            statuses = self.registry.mcp_statuses()
+        except Exception:  # noqa: BLE001 - one failed integration must not hide the account
+            statuses = []
+        connected_mcp = sum(row.get("status") == "connected" for row in statuses)
+        snapshot = DashboardSnapshot(
+            model=os.environ.get("DEEPSEEK_MODEL", "deepseek-chat"),
+            backend=(
+                "remote configured"
+                if os.environ.get("DEEPSEEK_API_KEY", "").strip()
+                else "FakeBackend · offline"
+            ),
+            trace=think_label(think_enabled),
+            tools=len(self.registry),
+            skills=skill_count,
+            data_sources=len(source_names),
+            mcp_connected=connected_mcp,
+            mcp_total=len(statuses),
+            portfolio=_load_dashboard_portfolio(account_name),
+            source_names=source_names,
+            mcp_configured=sum(row.get("status") == "configured" for row in statuses),
+        )
+        return render_dashboard(snapshot)
+
     def handle_security(self, _args: list[str], _think_enabled: str | bool) -> HandlerResult:
         return safety_summary()
 
@@ -166,3 +225,97 @@ class SessionCommandHandlers:
             True,
             "Language set to English." if value == "en" else "语言已切换为中文。",
         )
+
+
+def _dashboard_account_name(args: list[str]) -> str:
+    if not args:
+        return "default"
+    if len(args) == 2 and args[0] == "--account":
+        name = args[1].strip()
+        if name:
+            return name
+    if len(args) == 1 and args[0].startswith("--account="):
+        name = args[0].split("=", 1)[1].strip()
+        if name:
+            return name
+    raise ValueError("用法：/dashboard [--account name]")
+
+
+def _load_dashboard_portfolio(name: str) -> DashboardPortfolio:
+    conflict = False
+    try:
+        locations = inspect_account_locations(name)
+        conflict = locations.conflict
+        if not locations.user_exists and not locations.workspace_exists:
+            return DashboardPortfolio(name=locations.name, state="missing")
+        account = load_account(locations.name, create_if_missing=False)
+        return _dashboard_portfolio_view(account, conflict=locations.conflict)
+    except PortfolioNotFoundError:
+        return DashboardPortfolio(name=name, state="missing")
+    except Exception as exc:  # noqa: BLE001 - corrupt local state must degrade to a safe panel
+        return DashboardPortfolio(
+            name=name,
+            state="error",
+            conflict=conflict,
+            warning=f"账户读取失败（{type(exc).__name__}）。",
+        )
+
+
+def _dashboard_portfolio_view(
+    account: PortfolioAccount,
+    *,
+    conflict: bool,
+) -> DashboardPortfolio:
+    initial_cash = _finite_dashboard_number(account.initial_cash)
+    cash = _finite_dashboard_number(account.cash)
+    raw_positions: list[tuple[str, float, float, float, float]] = []
+    for holding in account.holdings:
+        shares = _finite_dashboard_number(holding.shares)
+        avg_cost = _finite_dashboard_number(holding.avg_cost)
+        last_price = _finite_dashboard_number(holding.last_price)
+        market_value = _finite_dashboard_number(shares * last_price)
+        raw_positions.append((holding.symbol, shares, avg_cost, last_price, market_value))
+
+    net_value = _finite_dashboard_number(portfolio_value(account))
+    positions: list[DashboardHolding] = []
+    for symbol, shares, avg_cost, last_price, market_value in raw_positions:
+        weight = market_value / net_value if net_value else 0.0
+        pnl_pct = (
+            (last_price / avg_cost - 1.0) * 100
+            if avg_cost
+            else 0.0
+        )
+        weight = _finite_dashboard_number(weight)
+        pnl_pct = _finite_dashboard_number(pnl_pct)
+        positions.append(DashboardHolding(
+            symbol=symbol,
+            shares=shares,
+            avg_cost=avg_cost,
+            last_price=last_price,
+            market_value=market_value,
+            weight=weight,
+            pnl_pct=pnl_pct,
+        ))
+    positions.sort(key=lambda item: item.market_value, reverse=True)
+    pnl = _finite_dashboard_number(net_value - initial_cash)
+    warning = "" if conflict else "；".join(account.storage_warnings)
+    return DashboardPortfolio(
+        name=account.name,
+        state="ready" if positions else "empty",
+        net_value=net_value,
+        initial_cash=initial_cash,
+        cash=cash,
+        pnl=pnl,
+        pnl_pct=_finite_dashboard_number(pnl / initial_cash * 100 if initial_cash else 0.0),
+        updated_at=account.updated_at,
+        holdings=tuple(positions),
+        conflict=conflict,
+        warning=warning,
+    )
+
+
+def _finite_dashboard_number(value: object) -> float:
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError("dashboard account values must be finite")
+    return number

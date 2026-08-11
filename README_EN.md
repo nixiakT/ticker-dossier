@@ -80,12 +80,19 @@ ticker-dossier /compare NVDA AMD 1y
 ticker-dossier /debate NVDA AMD 1y
 ticker-dossier /backtest TSLA 20 60 2y
 
+# One-shot, read-only terminal snapshot (default or named paper account)
+ticker-dossier --dashboard
+ticker-dossier /dashboard
+ticker-dossier /dashboard --account growth
+
 # Local paper records only—never a live order
 ticker-dossier /portfolio init 100000 AAPL MSFT NVDA
 ticker-dossier /portfolio locate default
 ticker-dossier /portfolio review
 ticker-dossier /predict list
 ```
+
+`--dashboard` and `/dashboard [--account name]` show a one-shot, read-only terminal snapshot of runtime status and the default or selected paper portfolio with its holdings. The snapshot uses only prices already saved in the ledger: it does not refresh quotes over the network, run `mark` automatically, write any files, or represent real holdings at a broker. If the same account name exists in conflicting locations, the snapshot reports the conflict without migrating the account.
 
 `/portfolio review` values holdings in memory with the latest available quotes and does not write the ledger. After checking paths and backups, migrate a legacy workspace account explicitly with `/portfolio migrate default`; migration refuses to overwrite or merge an existing destination.
 
@@ -153,6 +160,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for dependency rules, state mig
 | `/financials AAPL`, `/news AAPL 5` | Fundamentals and related news |
 | `/quality AAPL 1y`, `/report AAPL 1y` | Quality gate and research dossier |
 | `/compare NVDA AMD 1y`, `/debate NVDA AMD 1y` | Same-basis comparison and multi-perspective review |
+| `--dashboard`, `/dashboard [--account name]` | One-shot, read-only runtime and paper-holdings snapshot |
 | `/portfolio status\|review\|locate\|migrate`, `/predict list` | Paper portfolio, path migration, and prediction ledger |
 | `/skills`, `/mcp`, `/tools` | Extensions and tool diagnostics |
 | `/trace on\|off`, `/trace` | Control and inspect execution traces |
@@ -203,7 +211,7 @@ python -m mypy --strict \
   src/ticker_dossier/llm/{deepseek,fake}.py \
   src/ticker_dossier/integrations/market_data \
   src/ticker_dossier/integrations/mcp \
-  src/ticker_dossier/cli/{command_types,command_catalog,custom_commands,dynamic_commands}.py
+  src/ticker_dossier/cli/{command_types,command_catalog,custom_commands,dynamic_commands,ui}.py
 python -m compileall -q src/ticker_dossier evals
 python -m ticker_dossier --selfcheck
 python -m build

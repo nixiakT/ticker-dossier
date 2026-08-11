@@ -165,6 +165,23 @@ def test_sample_fallback_can_be_disabled(monkeypatch: pytest.MonkeyPatch) -> Non
     assert fallback["status"] == "disabled"
 
 
+def test_default_provider_diagnostics_disable_missing_akshare(monkeypatch) -> None:  # noqa: ANN001
+    import ticker_dossier.research.market_data.configuration as configuration
+
+    monkeypatch.setattr(configuration, "find_spec", lambda name: None)
+    providers, diagnostics, owned = configuration.build_default_providers(False)
+    try:
+        akshare = next(row for row in diagnostics if row["name"] == "AKShare")
+        assert akshare["status"] == "disabled"
+        assert "providers" in akshare["detail"]
+        assert all(provider.name != "AKShare" for provider in providers)
+    finally:
+        for provider in reversed(owned):
+            close = getattr(provider, "close", None)
+            if callable(close):
+                close()
+
+
 def test_route_task_selects_compare_and_backtest() -> None:
     agent = FinanceResearchAgent(provider=ProviderChain(providers=[StaticProvider()]))
 
