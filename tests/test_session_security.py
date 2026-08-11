@@ -198,7 +198,7 @@ def test_permission_policy_layers_workspace_writes(tmp_path) -> None:  # noqa: A
 def test_auto_approve_is_limited_to_workspace_python_scripts() -> None:
     assert can_auto_approve(
         "bash",
-        {"command": "python src/ticker_dossier/config.py"},
+        {"command": "python ticker_dossier/config.py"},
     )
     assert can_auto_approve("bash", {"command": "python -m pytest -q"})
     assert not can_auto_approve("web_fetch", {"url": "https://example.com"})
@@ -620,7 +620,7 @@ def test_agent_loop_blocks_confirm_tools_when_auto_approve_is_false(tmp_path) ->
     loop = AgentLoop(
         backend=ToolCallBackend(
             "bash",
-            {"command": "python src/ticker_dossier/config.py"},
+            {"command": "python ticker_dossier/config.py"},
         ),
         registry=registry,
         system_prompt=SYSTEM_PROMPT,

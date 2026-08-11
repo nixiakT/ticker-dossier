@@ -30,11 +30,11 @@ jobs:
       - name: Install project quality tools
         run: python -m pip install --upgrade pip ".[dev]"
       - name: Lint
-        run: python -m ruff check src tests evals scripts
+        run: python -m ruff check ticker_dossier tests evals scripts
       - name: Check complexity ratchets
         run: python scripts/ci/check_complexity.py
       - name: Compile Python modules
-        run: python -m compileall -q src/ticker_dossier evals tests scripts
+        run: python -m compileall -q ticker_dossier evals tests scripts
       - name: Type-check stable contracts
         run: python -m mypy
 

@@ -4,7 +4,7 @@
 
 ## 主要入口
 
-- `src/ticker_dossier/skills/loader.py`：扫描、解析和校验 `skills/*/SKILL.md`。
+- `ticker_dossier/skills/loader.py`：扫描、解析和校验 `skills/*/SKILL.md`。
 - `example-skill/`：最小示例。
 - `finance-stock/`、`finance-history-learning/`、`finance-research-evolution/`：金融研究流程。
 - `trace2skill/`：从已审查 Trace 沉淀可复用流程。

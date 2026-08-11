@@ -5,7 +5,7 @@ from importlib.util import resolve_name
 from pathlib import Path
 
 
-PACKAGE_ROOT = Path(__file__).parents[1] / "src" / "ticker_dossier"
+PACKAGE_ROOT = Path(__file__).parents[1] / "ticker_dossier"
 
 
 def _project_imports(path: Path) -> set[str]:

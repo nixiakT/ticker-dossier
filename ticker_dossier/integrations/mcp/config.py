@@ -162,7 +162,7 @@ def _config_from_spec(
 
 
 def _package_import_root() -> str:
-    """Return the trusted src/site-packages root for bundled MCP subprocesses."""
+    """Return the trusted checkout/site-packages root for bundled MCP subprocesses."""
     return str(Path(__file__).resolve().parents[3])
 
 

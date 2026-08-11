@@ -55,7 +55,8 @@ ticker-dossier = "ticker_dossier.cli.main:main"
 finance-agent = "ticker_dossier.cli.main:main"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
+include = ["ticker_dossier*"]
 
 [tool.setuptools.package-data]
 "ticker_dossier.resources" = [
@@ -67,7 +68,6 @@ where = ["src"]
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
-pythonpath = ["src"]
 
 [tool.ruff]
 line-length = 100
@@ -85,30 +85,30 @@ max-complexity = 24
 # rewrite.  These narrow exceptions document existing debt; new files and all
 # other rules in the selected families remain enforced.
 [tool.ruff.lint.per-file-ignores]
-"src/ticker_dossier/cli/main.py" = ["E702"]
-"src/ticker_dossier/portfolio/scoring.py" = ["C901"]
-"src/ticker_dossier/research/analysis/quality.py" = ["C901"]
-"src/ticker_dossier/research/discovery/resolver.py" = ["F401"]
-"src/ticker_dossier/research/discovery/web.py" = ["F541"]
-"src/ticker_dossier/tools/learning.py" = ["F541"]
+"ticker_dossier/cli/main.py" = ["E702"]
+"ticker_dossier/portfolio/scoring.py" = ["C901"]
+"ticker_dossier/research/analysis/quality.py" = ["C901"]
+"ticker_dossier/research/discovery/resolver.py" = ["F401"]
+"ticker_dossier/research/discovery/web.py" = ["F541"]
+"ticker_dossier/tools/learning.py" = ["F541"]
 "tests/test_finance_core.py" = ["F401"]
 "tests/test_finance_mcp.py" = ["F401"]
 
 [tool.mypy]
 python_version = "3.11"
 files = [
-  "src/ticker_dossier/bootstrap.py",
-  "src/ticker_dossier/security.py",
-  "src/ticker_dossier/runtime",
-  "src/ticker_dossier/research/protocols.py",
-  "src/ticker_dossier/market_data",
-  "src/ticker_dossier/integrations/llm",
-  "src/ticker_dossier/integrations/mcp",
-  "src/ticker_dossier/cli/commands/models.py",
-  "src/ticker_dossier/cli/commands/catalog.py",
-  "src/ticker_dossier/cli/commands/custom.py",
-  "src/ticker_dossier/cli/commands/dynamic.py",
-  "src/ticker_dossier/cli/terminal/ui.py",
+  "ticker_dossier/bootstrap.py",
+  "ticker_dossier/security.py",
+  "ticker_dossier/runtime",
+  "ticker_dossier/research/protocols.py",
+  "ticker_dossier/market_data",
+  "ticker_dossier/integrations/llm",
+  "ticker_dossier/integrations/mcp",
+  "ticker_dossier/cli/commands/models.py",
+  "ticker_dossier/cli/commands/catalog.py",
+  "ticker_dossier/cli/commands/custom.py",
+  "ticker_dossier/cli/commands/dynamic.py",
+  "ticker_dossier/cli/terminal/ui.py",
 ]
 strict = true
 follow_imports = "skip"

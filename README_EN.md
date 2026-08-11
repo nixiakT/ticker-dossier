@@ -135,7 +135,7 @@ flowchart LR
 `bootstrap.py` creates one `ResearchServices` instance and publishes it through `ToolRegistry`, so the CLI and Tool adapters share the same research service. `runtime.execution` owns permission checks, reused receipts, and side-effect boundaries. Market models, providers, caching, and multi-source orchestration live together under `market_data`; model backends, MCP, and other external adapters live under `integrations`. The composition root and `ToolRegistry` close application-owned resources.
 
 ```text
-src/ticker_dossier/
+ticker_dossier/
 ├── cli/
 │   ├── commands/        # Catalog, router, and capability handlers
 │   └── terminal/        # Input, dashboard, and terminal rendering
@@ -209,11 +209,11 @@ If user-level and workspace storage contain the same account name, reads show th
 
 ```bash
 python -m pip install -e ".[dev,providers]"
-python -m ruff check src tests evals scripts
+python -m ruff check ticker_dossier tests evals scripts
 python scripts/ci/check_complexity.py
 python -m pytest -q
 python -m mypy
-python -m compileall -q src/ticker_dossier evals tests scripts
+python -m compileall -q ticker_dossier evals tests scripts
 python -m ticker_dossier --selfcheck
 python -m build
 ```

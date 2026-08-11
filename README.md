@@ -135,7 +135,7 @@ flowchart LR
 `bootstrap.py` 创建单一 `ResearchServices` 并放入 `ToolRegistry`，CLI 与 Tool 适配器复用同一个研究服务。`runtime.execution` 统一处理权限、复用回执和副作用边界；行情模型、Provider、缓存与多源编排集中在 `market_data`，模型后端与 MCP 等外部适配器集中在 `integrations`。应用创建的资源由 composition root 和 `ToolRegistry` 统一关闭。
 
 ```text
-src/ticker_dossier/
+ticker_dossier/
 ├── cli/
 │   ├── commands/        # catalog、router 与按能力分组的 handlers
 │   └── terminal/        # 输入、Dashboard 与终端渲染
@@ -209,11 +209,11 @@ src/ticker_dossier/
 
 ```bash
 python -m pip install -e ".[dev,providers]"
-python -m ruff check src tests evals scripts
+python -m ruff check ticker_dossier tests evals scripts
 python scripts/ci/check_complexity.py
 python -m pytest -q
 python -m mypy
-python -m compileall -q src/ticker_dossier evals tests scripts
+python -m compileall -q ticker_dossier evals tests scripts
 python -m ticker_dossier --selfcheck
 python -m build
 ```

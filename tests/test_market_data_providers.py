@@ -24,7 +24,7 @@ from ticker_dossier.market_data.models import Quote
 
 
 def test_market_data_package_is_safe_as_the_first_research_related_import() -> None:
-    source_root = Path(__file__).parents[1] / "src"
+    source_root = Path(__file__).parents[1]
     code = (
         "import sys; "
         f"sys.path.insert(0, {str(source_root)!r}); "

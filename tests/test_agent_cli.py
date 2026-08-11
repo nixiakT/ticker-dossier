@@ -64,7 +64,7 @@ def test_maybe_compact_handles_one_long_assistant_tool_loop() -> None:
                     "id": f"call-{index}",
                     "name": "read",
                     "arguments": {
-                        "path": "src/ticker_dossier/integrations/mcp/client.py"
+                        "path": "ticker_dossier/integrations/mcp/client.py"
                         if index == 0
                         else f"file-{index}.py"
                     },
@@ -84,7 +84,7 @@ def test_maybe_compact_handles_one_long_assistant_tool_loop() -> None:
     assert compacted[1] == messages[1]
     assert compacted[2]["role"] == "assistant"
     assert "Earlier conversation was compacted" in compacted[2]["content"]
-    assert "src/ticker_dossier/integrations/mcp/client.py" in compacted[2]["content"]
+    assert "ticker_dossier/integrations/mcp/client.py" in compacted[2]["content"]
     assert len(compacted) < len(messages)
     recent = compacted[3:]
     assert [message["role"] for message in recent] == ["assistant", "tool"] * 3

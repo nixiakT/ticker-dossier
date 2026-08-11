@@ -4,7 +4,7 @@
 
 ## 设计目标
 
-- 所有生产包代码统一位于 `src/ticker_dossier/`，只使用 `ticker_dossier.*` 包路径。
+- 所有生产包代码统一位于 `ticker_dossier/`，只使用 `ticker_dossier.*` 包路径。
 - `runtime` 保持小而稳定，通过 `Tool`、`ToolRegistry` 和模型 `chat` 接口驱动能力。
 - 金融计算、外部 I/O、CLI 展示和应用组装分开演进。
 - 交互入口与一次性入口复用同一套组装逻辑和命令目录。
@@ -17,7 +17,7 @@
 
 ```text
 ticker-dossier/
-├── src/ticker_dossier/
+├── ticker_dossier/
 │   ├── __main__.py
 │   ├── bootstrap.py
 │   ├── config.py
@@ -62,36 +62,38 @@ ticker-dossier/
 └── .mcp.json
 ```
 
-`src` layout 可以避免从仓库根目录意外导入未安装代码。开发环境通过 editable install 使用同一包；测试配置中的 `pythonpath = ["src"]` 只提供直接运行测试时的兼容路径。
+生产包采用一层可见的 flat package layout：仓库根目录下的 `ticker_dossier/`
+同时也是稳定的 Python import namespace。`setuptools` 的发现范围显式限制为
+`ticker_dossier*`，不会把 `tests`、`evals`、`scripts` 或其他根目录误打进 wheel。
 
 ## 目录职责
 
 | 路径 | 责任 | 不应承担 |
 | --- | --- | --- |
-| `src/ticker_dossier/__main__.py` | 把模块运行转交给 CLI | 组装业务对象或实现命令 |
-| `src/ticker_dossier/bootstrap.py` | 创建 `ResearchServices`、后端、工具注册表和 `AgentLoop` | CLI 绘制、金融计算或状态渲染 |
-| `src/ticker_dossier/config.py` | 从本地环境文件补充环境变量 | 保存真实凭据或业务默认对象 |
-| `src/ticker_dossier/security.py` | 路径、shell、出站文本和不可信内容检查 | 命令路由或领域判断 |
-| `src/ticker_dossier/telemetry.py` | token usage 归一化、累计与可选成本估算 | 调用模型或负责终端展示 |
-| `src/ticker_dossier/runtime/loop.py` | 模型轮次、收敛、会话与最终任务边界 | 直接执行工具或选择具体适配器 |
-| `src/ticker_dossier/runtime/execution.py` | 工具权限、复用缓存、回执、observation 与副作用边界 | 模型调用或领域计算 |
-| `src/ticker_dossier/runtime/protocols.py`、`tools.py` | `ModelBackend`、`Tool` 与 `ToolRegistry` 稳定契约 | 导入具体后端、金融或集成实现 |
-| `src/ticker_dossier/market_data/` | 行情值对象、ProviderChain、缓存、并发、选择/合并和覆盖诊断 | CLI 呈现或纸面组合持久化 |
-| `src/ticker_dossier/market_data/providers/` | Provider contract、字段归一化与各外部数据源实现 | 研究策略、组合决策或命令路由 |
-| `src/ticker_dossier/research/analysis/` | 指标、投资框架、质量门禁和回测 | 网络访问或状态写入 |
-| `src/ticker_dossier/research/debate/` | 确定性辩论回退、模型辩论编排和证据校验 | 选择具体模型后端 |
-| `src/ticker_dossier/research/discovery/` | 标的解析与网页核验 | Provider 多源合并或 CLI 绘制 |
-| `src/ticker_dossier/research/learning/` | 研究记忆、历史校准和预测评估 | 真实交易或券商状态 |
-| `src/ticker_dossier/research/reporting.py` | 把领域结果渲染为研究档案文本 | 访问终端、创建模型或持久化会话 |
-| `src/ticker_dossier/portfolio/` | 纸面组合模型、评分、渲染、安全存储与显式迁移 | 实时行情 Provider 实现 |
-| `src/ticker_dossier/tools/` | 把领域、文件、网页、消息等能力适配为 `Tool` | 重复实现领域算法 |
-| `src/ticker_dossier/integrations/llm/` | 真实模型与离线模型后端 | 注册工具或决定 CLI 行为 |
-| `src/ticker_dossier/integrations/mcp/` | MCP 配置/信任、stdio 传输、发现/注册和生命周期 | Agent 收敛或领域策略 |
-| `src/ticker_dossier/integrations/` | HTTP、消息与调度等其余 I/O 边界 | Agent 循环和 CLI 状态机 |
-| `src/ticker_dossier/cli/commands/` | catalog、router 与按 session/research/portfolio/integrations/workflow 分组的 handlers | 实现领域算法或维护第二份命令清单 |
-| `src/ticker_dossier/cli/terminal/` | 交互输入、Dashboard 和宽度感知终端渲染 | 访问 Provider 或修改账本 |
-| `src/ticker_dossier/skills/` | 加载、校验和生成 Skill | 存放具体项目 Skill 内容 |
-| `src/ticker_dossier/resources/` | wheel 内置的只读 Skills 与 MCP 默认配置 | 保存用户编辑或运行状态 |
+| `ticker_dossier/__main__.py` | 把模块运行转交给 CLI | 组装业务对象或实现命令 |
+| `ticker_dossier/bootstrap.py` | 创建 `ResearchServices`、后端、工具注册表和 `AgentLoop` | CLI 绘制、金融计算或状态渲染 |
+| `ticker_dossier/config.py` | 从本地环境文件补充环境变量 | 保存真实凭据或业务默认对象 |
+| `ticker_dossier/security.py` | 路径、shell、出站文本和不可信内容检查 | 命令路由或领域判断 |
+| `ticker_dossier/telemetry.py` | token usage 归一化、累计与可选成本估算 | 调用模型或负责终端展示 |
+| `ticker_dossier/runtime/loop.py` | 模型轮次、收敛、会话与最终任务边界 | 直接执行工具或选择具体适配器 |
+| `ticker_dossier/runtime/execution.py` | 工具权限、复用缓存、回执、observation 与副作用边界 | 模型调用或领域计算 |
+| `ticker_dossier/runtime/protocols.py`、`tools.py` | `ModelBackend`、`Tool` 与 `ToolRegistry` 稳定契约 | 导入具体后端、金融或集成实现 |
+| `ticker_dossier/market_data/` | 行情值对象、ProviderChain、缓存、并发、选择/合并和覆盖诊断 | CLI 呈现或纸面组合持久化 |
+| `ticker_dossier/market_data/providers/` | Provider contract、字段归一化与各外部数据源实现 | 研究策略、组合决策或命令路由 |
+| `ticker_dossier/research/analysis/` | 指标、投资框架、质量门禁和回测 | 网络访问或状态写入 |
+| `ticker_dossier/research/debate/` | 确定性辩论回退、模型辩论编排和证据校验 | 选择具体模型后端 |
+| `ticker_dossier/research/discovery/` | 标的解析与网页核验 | Provider 多源合并或 CLI 绘制 |
+| `ticker_dossier/research/learning/` | 研究记忆、历史校准和预测评估 | 真实交易或券商状态 |
+| `ticker_dossier/research/reporting.py` | 把领域结果渲染为研究档案文本 | 访问终端、创建模型或持久化会话 |
+| `ticker_dossier/portfolio/` | 纸面组合模型、评分、渲染、安全存储与显式迁移 | 实时行情 Provider 实现 |
+| `ticker_dossier/tools/` | 把领域、文件、网页、消息等能力适配为 `Tool` | 重复实现领域算法 |
+| `ticker_dossier/integrations/llm/` | 真实模型与离线模型后端 | 注册工具或决定 CLI 行为 |
+| `ticker_dossier/integrations/mcp/` | MCP 配置/信任、stdio 传输、发现/注册和生命周期 | Agent 收敛或领域策略 |
+| `ticker_dossier/integrations/` | HTTP、消息与调度等其余 I/O 边界 | Agent 循环和 CLI 状态机 |
+| `ticker_dossier/cli/commands/` | catalog、router 与按 session/research/portfolio/integrations/workflow 分组的 handlers | 实现领域算法或维护第二份命令清单 |
+| `ticker_dossier/cli/terminal/` | 交互输入、Dashboard 和宽度感知终端渲染 | 访问 Provider 或修改账本 |
+| `ticker_dossier/skills/` | 加载、校验和生成 Skill | 存放具体项目 Skill 内容 |
+| `ticker_dossier/resources/` | wheel 内置的只读 Skills 与 MCP 默认配置 | 保存用户编辑或运行状态 |
 | `skills/` | 可审查、可版本化的项目 Skill overlay | 临时会话状态或密钥 |
 | `tests/` | 单元、集成和回归测试 | 生产时导入的实现 |
 | `evals/` | 评估任务、指标、trace 和安全评估 | 运行时依赖 |
@@ -127,7 +129,7 @@ ticker_dossier.runtime ──────────────> security
 
 ## Composition root
 
-`src/ticker_dossier/bootstrap.py` 是核心应用的 composition root。它有意成为少数“知道所有具体实现”的模块。
+`ticker_dossier/bootstrap.py` 是核心应用的 composition root。它有意成为少数“知道所有具体实现”的模块。
 
 `build_research_services()` 创建应用级 `ResearchServices`。当前它持有唯一的 `FinanceResearchAgent`；该 facade 及其 `ProviderChain` 会被 CLI、金融 Tool、演化 Tool 和调度 Tool 共同复用，避免一次进程内出现相互独立的研究服务和缓存。
 
@@ -249,9 +251,9 @@ MCP 按职责拆成四层：
 
 ### 版本控制内
 
-- `src/ticker_dossier/`：生产源码。
+- `ticker_dossier/`：生产源码。
 - `tests/` 与 `evals/`：验证资产。
-- `src/ticker_dossier/resources/`：随 wheel 发布的只读 Skill 与 MCP 默认配置。
+- `ticker_dossier/resources/`：随 wheel 发布的只读 Skill 与 MCP 默认配置。
 - `skills/`：项目 Skill overlay，修改后必须像代码一样审查。
 - `docs/`、`pyproject.toml`、`.env.example` 和 `.mcp.json`：文档与无密钥配置。
 
@@ -383,10 +385,10 @@ CI 会构建 wheel，在 checkout 外的新虚拟环境中安装并验证内置 
 最低验证集：
 
 ```bash
-python -m ruff check src tests evals scripts
+python -m ruff check ticker_dossier tests evals scripts
 python scripts/ci/check_complexity.py
 python -m pytest -q
-python -m compileall -q src/ticker_dossier evals tests scripts
+python -m compileall -q ticker_dossier evals tests scripts
 python -m mypy
 ticker-dossier --selfcheck
 ticker-dossier --dashboard
@@ -416,6 +418,6 @@ GitHub Actions 保持一个 PR 检查 workflow，在其中分成 static analysis
 - [HTTPX CI](https://github.com/encode/httpx/blob/master/.github/workflows/test-suite.yml)：保留单一测试 workflow，把可复用检查下沉到仓库脚本。
 - [Click workflows](https://github.com/pallets/click/tree/main/.github/workflows)：按检查、发布等生命周期组织 automation，并固定 Action 版本。
 - [Rich CI](https://github.com/Textualize/rich/blob/master/.github/workflows/pythonpackage.yml)：终端项目覆盖多个 Python 与操作系统组合。
-- [PyPA src layout](https://packaging.python.org/en/latest/discussions/src-layout-vs-flat-layout/)：避免仓库根目录意外导入并统一安装后的包行为。
+- [PyPA package layout](https://packaging.python.org/en/latest/discussions/src-layout-vs-flat-layout/)：明确 flat layout 的取舍，并用受限 package discovery 避免误打包根目录内容。
 
 这些项目提供结构原则而不是可复制模板。本仓库保留单包、单 workflow、本地优先和金融研究专用的约束，不为尚不存在的部署或发布流程创建空抽象。

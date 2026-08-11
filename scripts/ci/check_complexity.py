@@ -9,8 +9,8 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 CHECKS = (
-    ("src/ticker_dossier/portfolio/scoring.py", 39),
-    ("src/ticker_dossier/research/analysis/quality.py", 31),
+    ("ticker_dossier/portfolio/scoring.py", 39),
+    ("ticker_dossier/research/analysis/quality.py", 31),
 )
 
 
