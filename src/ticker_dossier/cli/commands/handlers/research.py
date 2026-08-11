@@ -93,9 +93,9 @@ class ResearchCommandHandlers:
         resolved = self.write_guard(output_path, report)
         resolved.write_text(report, encoding="utf-8")
         try:
-            display_path = str(resolved.relative_to(Path.cwd()))
+            display_path = resolved.relative_to(Path.cwd()).as_posix()
         except ValueError:
-            display_path = str(resolved)
+            display_path = resolved.as_posix()
         return self._with_result_trace(
             "finance_generate_report",
             f"研究报告已保存到: {display_path}",

@@ -47,7 +47,7 @@ def test_project_registry_connects_domain_mcp() -> None:
     registry = build_default_registry()
     try:
         tool = registry.get("mcp__finance__risk_budget")
-        assert tool is not None
+        assert tool is not None, registry.mcp_statuses()
         output = tool.run(capital=100_000, risk_pct=1, entry_price=50, stop_price=45)
         assert '"max_shares": 200' in output
         assert registry.get("mcp__echo") is not None

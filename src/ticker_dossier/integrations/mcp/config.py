@@ -151,7 +151,7 @@ def _config_from_spec(
         )
     if builtin:
         command = sys.executable
-        env = {**env, "PYTHONPATH": _package_import_root()}
+        env = {**env, **_builtin_mcp_env()}
     return MCPServerConfig(
         name=name,
         command=(command, *args),
@@ -164,6 +164,14 @@ def _config_from_spec(
 def _package_import_root() -> str:
     """Return the trusted src/site-packages root for bundled MCP subprocesses."""
     return str(Path(__file__).resolve().parents[3])
+
+
+def _builtin_mcp_env() -> dict[str, str]:
+    """Keep bundled Python MCP servers importable and UTF-8 on every OS."""
+    return {
+        "PYTHONIOENCODING": "utf-8",
+        "PYTHONPATH": _package_import_root(),
+    }
 
 
 def _is_builtin_project_server(

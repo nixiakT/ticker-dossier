@@ -27,8 +27,9 @@ def isolate_persistent_state(
     portfolio_dir = user_state / "portfolios"
     prediction_path = user_state / "predictions.jsonl"
 
-    # Path.home() is evaluated lazily by CLI history and custom-command paths.
+    # Path.home() is evaluated lazily; Windows prefers USERPROFILE over HOME.
     monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.setenv("USERPROFILE", str(fake_home))
 
     monkeypatch.setenv("FINANCE_PORTFOLIO_DIR", str(portfolio_dir))
     monkeypatch.setattr(portfolio, "DEFAULT_PORTFOLIO_DIR", portfolio_dir)

@@ -251,7 +251,11 @@ def test_packaged_mcp_template_works_outside_a_source_checkout(
     runtime = connect_project_mcp(registry)
     try:
         statuses = {row["name"]: row["status"] for row in runtime.statuses()}
-        assert statuses == {"echo": "connected", "finance": "connected"}
+        assert statuses == {"echo": "connected", "finance": "connected"}, runtime.statuses()
+        assert {
+            client.name: client.env.get("PYTHONIOENCODING")
+            for client in runtime.clients
+        } == {"echo": "utf-8", "finance": "utf-8"}
         assert registry.get("mcp__echo__echo") is not None
         assert registry.get("mcp__finance__risk_budget") is not None
     finally:
@@ -413,6 +417,7 @@ def test_mcp_server_without_prompts_remains_connected(tmp_path: Path) -> None:
 
     runtime = connect_project_mcp(registry, tmp_path / "missing-config.json")
     try:
+        assert runtime.clients[0].env["PYTHONIOENCODING"] == "utf-8"
         assert registry.get("mcp__echo") is not None
         assert registry.mcp_prompts() == []
         assert registry.mcp_statuses()[0]["status"] == "connected"

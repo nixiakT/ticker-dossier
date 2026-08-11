@@ -13,10 +13,10 @@ from ticker_dossier.integrations.mcp.config import (
     MCP_NAME_RE,
     MCPConfigError,
     MCPServerConfig,
+    _builtin_mcp_env,
     _config_from_spec,
     _default_mcp_config_path,
     _load_project_configs,
-    _package_import_root,
 )
 from ticker_dossier.integrations.mcp.transport import MCPClient, MCPRPCError
 from ticker_dossier.runtime.tools import Tool, ToolRegistry
@@ -73,7 +73,7 @@ def default_echo_client() -> MCPClient:
     return MCPClient(
         [sys.executable, "-m", "ticker_dossier.integrations.mcp.echo_server"],
         name="echo",
-        env={"PYTHONPATH": _package_import_root()},
+        env=_builtin_mcp_env(),
     )
 
 
