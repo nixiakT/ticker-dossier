@@ -24,6 +24,9 @@ class AlphaVantageProvider:
     def available(self) -> bool:
         return bool(self.api_key)
 
+    def close(self) -> None:
+        self.client.close()
+
     def _get(self, params: dict[str, str]) -> dict[str, Any]:
         if not self.api_key:
             raise ProviderError("missing ALPHAVANTAGE_API_KEY")
@@ -32,6 +35,8 @@ class AlphaVantageProvider:
         response = self.client.get("https://www.alphavantage.co/query", params=params)
         response.raise_for_status()
         data = response.json()
+        if not isinstance(data, dict):
+            raise ProviderError("invalid Alpha Vantage response")
         if "Error Message" in data:
             raise ProviderError(data["Error Message"])
         if "Note" in data or "Information" in data:

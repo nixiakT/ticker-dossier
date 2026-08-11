@@ -16,8 +16,11 @@ SECRET_PATTERNS = (
 
 
 class Memory:
-    def __init__(self, path: str | Path = DEFAULT_MEMORY_PATH):
-        self.path = Path(path)
+    def __init__(self, path: str | Path | None = None):
+        # Resolve the default when an instance is created.  Besides making the
+        # path configurable for an application process, this keeps test suites
+        # from retaining a developer-owned path in a function default.
+        self.path = Path(DEFAULT_MEMORY_PATH if path is None else path)
 
     def write(self, note: str) -> Path:
         clean = sanitize_memory_note(note)
@@ -50,8 +53,8 @@ class Memory:
 
 
 class KVMemory:
-    def __init__(self, path: str | Path = DEFAULT_KV_MEMORY_PATH):
-        self.path = Path(path)
+    def __init__(self, path: str | Path | None = None):
+        self.path = Path(DEFAULT_KV_MEMORY_PATH if path is None else path)
         self.data = json.loads(self.path.read_text(encoding="utf-8") or "{}") if self.path.exists() else {}
 
     def remember(self, key: str, value: str) -> Path:
@@ -85,5 +88,5 @@ def sanitize_memory_key(key: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.:-]+", "-", str(key).strip()).strip("-")
 
 
-def recall_project_memory(path: str | Path = DEFAULT_MEMORY_PATH) -> str:
+def recall_project_memory(path: str | Path | None = None) -> str:
     return Memory(path).recall().strip()

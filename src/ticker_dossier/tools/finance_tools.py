@@ -1,6 +1,7 @@
 """Finance tools for stock research."""
 from __future__ import annotations
 
+import atexit
 from dataclasses import replace
 
 from ticker_dossier.runtime.tools import Tool
@@ -19,8 +20,30 @@ def _default_agent() -> FinanceResearchAgent:
     """
     global _fallback_agent
     if _fallback_agent is None:
-        _fallback_agent = FinanceResearchAgent()
+        from ticker_dossier.bootstrap import build_finance_research_agent
+
+        _fallback_agent = build_finance_research_agent()
     return _fallback_agent
+
+
+def shutdown_fallback_agent() -> None:
+    """Close and clear the module-level compatibility singleton."""
+    global _fallback_agent
+    agent = _fallback_agent
+    _fallback_agent = None
+    if agent is not None:
+        agent.close()
+
+
+def _shutdown_fallback_agent_at_exit() -> None:
+    """Best-effort process-exit cleanup must never emit an atexit traceback."""
+    try:
+        shutdown_fallback_agent()
+    except Exception:  # noqa: BLE001 - interpreter shutdown cannot recover
+        pass
+
+
+atexit.register(_shutdown_fallback_agent_at_exit)
 
 
 def _route_task(task: str) -> str:

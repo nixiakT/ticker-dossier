@@ -32,7 +32,11 @@ _FINANCE_TOOL_NOTICE = (
 class FakeBackend:
     """规则驱动的假模型：只为打通管道，不要当真。"""
 
-    def chat(self, messages: list[dict[str, Any]], tools: list[dict] | None = None) -> dict[str, Any]:
+    def chat(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         last = messages[-1]["content"] if messages else ""
         # 如果上一条是工具结果（observation），就给最终答复
         if messages and messages[-1].get("role") == "tool":

@@ -4,8 +4,9 @@ from __future__ import annotations
 from functools import wraps
 import re
 
+from ticker_dossier.security import redact_sensitive_text
+
 from .backtest import backtest_moving_average_cross, format_backtest, parse_strategy
-from .data import ProviderChain, enrich_financial_pe, export_history_csv
 from .debate_orchestrator import ModelDebateOrchestrator, render_debate_outcomes
 from .history_learning import (
     calibrate_momentum_signal,
@@ -15,6 +16,7 @@ from .history_learning import (
     update_history_learning_skill,
 )
 from .indicators import calculate_indicators, format_indicators
+from .market_data import ProviderChain, enrich_financial_pe, export_history_csv
 from .models import Candle, Financials, Quote, StockSnapshot, utc_now_iso
 from .paper_portfolio import (
     construct_portfolio,
@@ -34,6 +36,7 @@ from .paper_portfolio import (
     value_account_read_only,
 )
 from .predictions import PredictionRecord, record_prediction, render_prediction_record
+from .protocols import DebateBackend, DebateBackendFactory
 from .quality import render_quality_screen
 from .rendering import render_comparison, render_daily_brief, render_financials, render_stock_report
 from .resolver import resolve_symbol, resolve_symbol_text
@@ -54,9 +57,25 @@ def _with_provider_request_deadline(method):  # noqa: ANN001, ANN201
 
 
 class FinanceResearchAgent:
-    def __init__(self, provider: ProviderChain | None = None, debate_backend=None):  # noqa: ANN001
-        self.provider = provider or ProviderChain()
+    def __init__(
+        self,
+        provider: ProviderChain | None = None,
+        debate_backend: DebateBackend | None = None,
+        *,
+        debate_backend_factory: DebateBackendFactory | None = None,
+    ):
+        self._owns_provider = provider is None
+        self.provider = ProviderChain() if provider is None else provider
         self.debate_backend = debate_backend
+        self.debate_backend_factory = debate_backend_factory
+
+    def close(self) -> None:
+        """Close only the provider lifecycle created by this facade."""
+        if not self._owns_provider:
+            return
+        close = getattr(self.provider, "close", None)
+        if callable(close):
+            close()
 
     @_with_provider_request_deadline
     def snapshot(self, symbol: str, period: str = "1y", news_limit: int = 5) -> StockSnapshot:
@@ -270,7 +289,10 @@ class FinanceResearchAgent:
     def debate_stocks(self, symbols: list[str] | str, period: str = "1y") -> str:
         symbol_list = _coerce_symbols(symbols)
         snapshots = [self.snapshot(symbol, period, 3) for symbol in symbol_list]
-        outcomes = ModelDebateOrchestrator(backend=self.debate_backend).run(snapshots)
+        outcomes = ModelDebateOrchestrator(
+            backend=self.debate_backend,
+            backend_factory=self.debate_backend_factory,
+        ).run(snapshots)
         output = render_debate_outcomes(outcomes)
         recorded: list[str] = []
         for snapshot, outcome in zip(snapshots, outcomes):
@@ -806,7 +828,7 @@ def _source_coverage(provider) -> dict[str, dict]:  # noqa: ANN001
 
 
 def _compact_error(exc: Exception, limit: int = 220) -> str:
-    text = " ".join(str(exc).split())
+    text = " ".join(redact_sensitive_text(str(exc)).split())
     text = text.replace("For more information check:", "详情:")
     if len(text) <= limit:
         return text

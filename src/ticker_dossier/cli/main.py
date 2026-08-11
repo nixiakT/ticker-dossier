@@ -556,13 +556,14 @@ def main(argv: list[str] | None = None) -> int:
 
 def _finance_service(registry):  # noqa: ANN001, ANN202
     """Return the registry-owned facade, with a compatibility fallback for tests."""
-    from ticker_dossier.bootstrap import ResearchServices
-    from ticker_dossier.research.agent import FinanceResearchAgent
+    from ticker_dossier.bootstrap import ResearchServices, build_finance_research_agent
 
     services = registry.get_service("research")
     if isinstance(services, ResearchServices):
         return services.finance
-    return FinanceResearchAgent()
+    finance = build_finance_research_agent()
+    registry.manage(finance)
+    return finance
 
 
 def _runtime_bottom_toolbar(think_mode: str, agent, finance, dynamic: DynamicSlashCommands) -> str:  # noqa: ANN001

@@ -125,7 +125,7 @@ flowchart LR
     K["Packaged resources<br/>Skills · MCP defaults"] --> T
 ```
 
-`bootstrap.py` creates one `ResearchServices` instance and publishes it through `ToolRegistry`, so the CLI and Tool adapters share the same research service. `runtime.execution` owns permission checks, reused receipts, and side-effect boundaries; market providers and MCP configuration, transport, and lifecycle live under `integrations`.
+`bootstrap.py` creates one `ResearchServices` instance and publishes it through `ToolRegistry`, so the CLI and Tool adapters share the same research service. `runtime.execution` owns permission checks, reused receipts, and side-effect boundaries. Market-provider and MCP configuration and transport live under `integrations`; the composition root and `ToolRegistry` close application-owned research services, model backends, and MCP runtimes.
 
 ```text
 src/ticker_dossier/
@@ -193,17 +193,23 @@ If user-level and workspace storage contain the same account name, reads show th
 python -m pip install -e ".[dev,providers]"
 python -m ruff check src tests evals
 python -m pytest -q
-python -m mypy \
-  src/ticker_dossier/runtime/{protocols,tools,execution}.py \
+python -m mypy --strict \
+  src/ticker_dossier/bootstrap.py \
+  src/ticker_dossier/security.py \
+  src/ticker_dossier/runtime \
+  src/ticker_dossier/research/protocols.py \
   src/ticker_dossier/research/models.py \
-  src/ticker_dossier/integrations/market_data/base.py \
-  src/ticker_dossier/integrations/mcp/{config,transport,runtime}.py
+  src/ticker_dossier/research/market_data \
+  src/ticker_dossier/llm/{deepseek,fake}.py \
+  src/ticker_dossier/integrations/market_data \
+  src/ticker_dossier/integrations/mcp \
+  src/ticker_dossier/cli/{command_types,command_catalog,custom_commands,dynamic_commands}.py
 python -m compileall -q src/ticker_dossier evals
 python -m ticker_dossier --selfcheck
 python -m build
 ```
 
-CI tests Python 3.11/3.13 and runs Ruff (including a complexity gate), targeted mypy checks for stable contracts, dependency-direction tests, and an outside-the-checkout wheel/resource smoke test. Evaluation utilities live in `evals/`, and versioned project Skills in `skills/`; keep credentials, personal state, and generated output untracked.
+CI tests Python 3.11/3.13 and runs Ruff (including a complexity gate), strict mypy over selected core packages, dependency-direction tests, and an outside-the-checkout wheel/resource smoke test. Evaluation utilities live in `evals/`, and versioned project Skills in `skills/`; keep credentials, personal state, and generated output untracked.
 
 ## License
 

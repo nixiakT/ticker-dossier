@@ -16,9 +16,16 @@ class SecurityError(PermissionError):
 WORKSPACE_ROOT = Path.cwd().resolve()
 BLOCKED_PATH_PARTS = {".git", ".ssh", ".aws", ".config", ".docker", ".claude"}
 BLOCKED_FILE_NAMES = {".npmrc", ".pypirc", ".netrc", "credentials", "id_rsa", "id_ed25519"}
+_SECRET_LABEL_PATTERN = r"(?:api[_-]?key|token|secret|password|cookie)"
 SECRET_PATTERNS = (
-    re.compile(r"sk-[A-Za-z0-9_\-]{16,}"),
-    re.compile(r"(?i)(api[_-]?key|token|secret|password)\s*[:=]\s*['\"]?[A-Za-z0-9_\-]{12,}"),
+    re.compile(r"\bsk-[A-Za-z0-9_\-]{16,}\b"),
+    re.compile(
+        rf"(?i){_SECRET_LABEL_PATTERN}\s*[:=]\s*['\"]?[A-Za-z0-9_\-]{{12,}}"
+    ),
+)
+REDACTION_PATTERNS = (
+    re.compile(rf"(?i){_SECRET_LABEL_PATTERN}\s*[:=]\s*['\"]?[^'\"\s]+"),
+    re.compile(r"\bsk-[A-Za-z0-9_\-]{16,}\b"),
 )
 DESTRUCTIVE_COMMANDS = {
     "rm",
@@ -141,6 +148,14 @@ def guard_outbound_text(text: str, *, label: str = "出站内容") -> None:
             continue
         if len(secret) >= 8 and secret in value:
             raise SecurityError(f"{label} 包含当前环境中的敏感值，已阻止外传。")
+
+
+def redact_sensitive_text(text: str) -> str:
+    """Replace secret-like values before text reaches logs, models, or users."""
+    clean = str(text)
+    for pattern in REDACTION_PATTERNS:
+        clean = pattern.sub("[REDACTED_SECRET]", clean)
+    return clean
 
 
 def guard_shell(command: str) -> list[str]:

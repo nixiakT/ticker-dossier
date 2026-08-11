@@ -3,11 +3,21 @@ from __future__ import annotations
 
 from dataclasses import replace
 from functools import partial
+from typing import TYPE_CHECKING
 
-from ticker_dossier.research.agent import FinanceResearchAgent
 from ticker_dossier.integrations.scheduler import add_job, list_jobs, render_jobs, run_due_jobs
 from ticker_dossier.integrations.wechat import send_markdown, send_text
 from ticker_dossier.runtime.tools import Tool
+
+if TYPE_CHECKING:
+    from ticker_dossier.research.agent import FinanceResearchAgent
+
+
+def _default_finance_agent() -> FinanceResearchAgent:
+    """Build the legacy scheduler fallback through the composition root."""
+    from ticker_dossier.bootstrap import build_finance_research_agent
+
+    return build_finance_research_agent()
 
 
 def _schedule_wechat_brief(symbols: str, interval_minutes: int = 1440) -> str:
@@ -45,16 +55,26 @@ def _schedule_run_due_with_agent(agent: FinanceResearchAgent | None) -> str:
 
 def _run_job(job, *, finance_agent: FinanceResearchAgent | None = None) -> str:  # noqa: ANN001
     if job.kind == "wechat_brief":
-        agent = finance_agent or FinanceResearchAgent()
-        symbols = job.payload.get("symbols", "")
-        brief = agent.daily_brief(symbols)
-        return send_markdown(brief, title="TickerDossier Brief").status
+        owns_agent = finance_agent is None
+        agent = _default_finance_agent() if finance_agent is None else finance_agent
+        try:
+            symbols = job.payload.get("symbols", "")
+            brief = agent.daily_brief(symbols)
+            return send_markdown(brief, title="TickerDossier Brief").status
+        finally:
+            if owns_agent:
+                agent.close()
     if job.kind == "wechat_message":
         return send_text(job.payload.get("message", ""), title="TickerDossier").status
     if job.kind == "wechat_portfolio_mark":
-        agent = finance_agent or FinanceResearchAgent()
-        report = agent.mark_paper_portfolio(job.payload.get("name", "default"))
-        return send_markdown(report, title="TickerDossier Portfolio").status
+        owns_agent = finance_agent is None
+        agent = _default_finance_agent() if finance_agent is None else finance_agent
+        try:
+            report = agent.mark_paper_portfolio(job.payload.get("name", "default"))
+            return send_markdown(report, title="TickerDossier Portfolio").status
+        finally:
+            if owns_agent:
+                agent.close()
     return f"unsupported job kind: {job.kind}"
 
 

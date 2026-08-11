@@ -150,7 +150,7 @@ class InteractiveInput:
 
     def read(self) -> str:
         if self._session is not None:
-            return self._session.prompt()
+            return str(self._session.prompt())
         return input(self.prompt)
 
     def _build_prompt_session(self):

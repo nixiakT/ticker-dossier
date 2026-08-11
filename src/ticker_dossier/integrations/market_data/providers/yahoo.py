@@ -39,6 +39,9 @@ class YahooFinanceProvider:
             },
         )
 
+    def close(self) -> None:
+        self.client.close()
+
     def _chart(self, symbol: str, period: str, interval: str) -> dict[str, Any]:
         normalized = normalize_symbol(symbol)
         query_symbol = to_yahoo_symbol(normalized)
@@ -48,13 +51,18 @@ class YahooFinanceProvider:
         )
         response.raise_for_status()
         data = response.json()
+        if not isinstance(data, dict):
+            raise ProviderError("invalid Yahoo chart response")
         chart = data.get("chart", {})
+        if not isinstance(chart, dict):
+            raise ProviderError("invalid Yahoo chart payload")
         if chart.get("error"):
             raise ProviderError(str(chart["error"]))
         result = (chart.get("result") or [None])[0]
-        if not result:
+        if not isinstance(result, dict) or not result:
             raise ProviderError("empty Yahoo chart")
         return result
+
     def get_quote(self, symbol: str) -> Quote:
         normalized = normalize_symbol(symbol)
         query_symbol = to_yahoo_symbol(normalized)
@@ -211,7 +219,7 @@ class YahooFinanceProvider:
 
     def _yfinance_info(self, query_symbol: str) -> dict[str, Any]:
         try:
-            import yfinance as yf  # type: ignore
+            import yfinance as yf
         except ImportError as exc:
             raise ProviderError("yfinance package is not installed") from exc
         proxy = proxy_url()

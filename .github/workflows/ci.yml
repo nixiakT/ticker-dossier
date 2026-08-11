@@ -29,19 +29,29 @@ jobs:
         run: python -m pip install --upgrade pip mypy ruff
       - name: Lint
         run: ruff check src tests evals
+      - name: Guard legacy complexity ceilings
+        run: |
+          ruff check --isolated --select C901 --config "lint.mccabe.max-complexity=39" src/ticker_dossier/research/portfolio/scoring.py
+          ruff check --isolated --select C901 --config "lint.mccabe.max-complexity=31" src/ticker_dossier/research/quality.py
       - name: Compile all Python modules
         run: python -m compileall -q src/ticker_dossier evals tests
       - name: Type-check stable contracts
         run: >-
-          mypy
-          src/ticker_dossier/runtime/protocols.py
-          src/ticker_dossier/runtime/tools.py
-          src/ticker_dossier/runtime/execution.py
+          mypy --strict
+          src/ticker_dossier/bootstrap.py
+          src/ticker_dossier/security.py
+          src/ticker_dossier/runtime
+          src/ticker_dossier/research/protocols.py
           src/ticker_dossier/research/models.py
-          src/ticker_dossier/integrations/market_data/base.py
-          src/ticker_dossier/integrations/mcp/config.py
-          src/ticker_dossier/integrations/mcp/transport.py
-          src/ticker_dossier/integrations/mcp/runtime.py
+          src/ticker_dossier/research/market_data
+          src/ticker_dossier/llm/deepseek.py
+          src/ticker_dossier/llm/fake.py
+          src/ticker_dossier/integrations/market_data
+          src/ticker_dossier/integrations/mcp
+          src/ticker_dossier/cli/command_types.py
+          src/ticker_dossier/cli/command_catalog.py
+          src/ticker_dossier/cli/custom_commands.py
+          src/ticker_dossier/cli/dynamic_commands.py
 
   tests:
     name: Core tests · Python ${{ matrix.python-version }}

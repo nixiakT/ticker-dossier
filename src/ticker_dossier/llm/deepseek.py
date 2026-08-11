@@ -56,7 +56,7 @@ class DeepSeekBackend:
         self.read_retries = max(configured_retries, 0)
         self._client = http_client(timeout=self.timeout, follow_redirects=True)
 
-    def chat(self, messages: list[dict[str, Any]], tools: list[dict] | None = None,
+    def chat(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None,
              temperature: float = 0.0) -> dict[str, Any]:
         """一次（非流式）对话补全，返回归一化的 assistant 消息。"""
         if self.api_mode == "responses":
@@ -85,7 +85,7 @@ class DeepSeekBackend:
     def _responses_chat(
         self,
         messages: list[dict[str, Any]],
-        tools: list[dict] | None,
+        tools: list[dict[str, Any]] | None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "model": self.model,
@@ -112,6 +112,10 @@ class DeepSeekBackend:
                 if attempt >= self.read_retries:
                     raise
         raise RuntimeError("unreachable model retry state")
+
+    def close(self) -> None:
+        """Release the shared HTTP connection pool owned by this adapter."""
+        self._client.close()
 
     # --- 把内部 messages（含 role=tool）转成 OpenAI 标准格式 ---
     def _to_openai_messages(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -165,8 +169,8 @@ class DeepSeekBackend:
         }
 
     @staticmethod
-    def _to_openai_tool_calls(calls: list[dict]) -> list[dict]:
-        out = []
+    def _to_openai_tool_calls(calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
         for i, c in enumerate(calls):
             out.append({"id": c.get("id", f"call_{i}"), "type": "function",
                         "function": {"name": c["name"],

@@ -5,12 +5,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 import json
 import math
-import os
 import re
-from typing import Any, Callable, Protocol
+from typing import Any
 
 from .debate import debate_stock, rule_based_decision
 from .models import StockSnapshot
+from .protocols import DebateBackend as ChatBackend
+from .protocols import DebateBackendFactory
+from .protocols import ManagedDebateBackend
 
 
 MODEL_MODE = "model"
@@ -20,15 +22,6 @@ _SECRET_PATTERNS = (
     re.compile(r"(?i)(api[_-]?key|token|secret|password|cookie)\s*[:=]\s*['\"]?[^'\"\s]+"),
     re.compile(r"\bsk-[A-Za-z0-9_-]{16,}\b"),
 )
-
-
-class ChatBackend(Protocol):
-    def chat(
-        self,
-        messages: list[dict[str, Any]],
-        tools: list[dict] | None = None,
-        temperature: float = 0.0,
-    ) -> dict[str, Any]: ...
 
 
 @dataclass(frozen=True)
@@ -117,27 +110,40 @@ class ModelDebateOrchestrator:
     def __init__(
         self,
         backend: ChatBackend | None = None,
-        backend_factory: Callable[[], ChatBackend] | None = None,
+        backend_factory: DebateBackendFactory | None = None,
     ):
         self._backend = backend
-        self._backend_factory = backend_factory or _default_backend
+        self._backend_factory = backend_factory
 
     def run(self, snapshots: list[StockSnapshot]) -> list[DebateOutcome]:
         if not snapshots:
             return []
-        try:
-            backend = self._backend or self._backend_factory()
-        except Exception as exc:  # noqa: BLE001 - the fallback is a product requirement
-            reason = _safe_error(exc)
-            return [_fallback(snapshot, reason) for snapshot in snapshots]
-
-        outcomes: list[DebateOutcome] = []
-        for snapshot in snapshots:
+        backend = self._backend
+        backend_factory = self._backend_factory
+        owned_backend: ManagedDebateBackend | None = None
+        if backend is None:
+            if backend_factory is None:
+                return [_fallback(snapshot, "模型辩论后端未配置") for snapshot in snapshots]
             try:
-                outcomes.append(self._run_model(snapshot, backend))
-            except Exception as exc:  # noqa: BLE001 - one stock must not abort the others
-                outcomes.append(_fallback(snapshot, _safe_error(exc)))
-        return outcomes
+                owned_backend = backend_factory()
+            except Exception as exc:  # noqa: BLE001 - the fallback is a product requirement
+                reason = _safe_error(exc)
+                return [_fallback(snapshot, reason) for snapshot in snapshots]
+            backend = owned_backend
+        if backend is None:
+            return [_fallback(snapshot, "模型辩论后端未配置") for snapshot in snapshots]
+
+        try:
+            outcomes: list[DebateOutcome] = []
+            for snapshot in snapshots:
+                try:
+                    outcomes.append(self._run_model(snapshot, backend))
+                except Exception as exc:  # noqa: BLE001 - one stock must not abort the others
+                    outcomes.append(_fallback(snapshot, _safe_error(exc)))
+            return outcomes
+        finally:
+            if owned_backend is not None:
+                _close_owned_backend(owned_backend)
 
     def _run_model(self, snapshot: StockSnapshot, backend: ChatBackend) -> DebateOutcome:
         evidence = build_evidence(snapshot)
@@ -589,11 +595,12 @@ def _fallback(snapshot: StockSnapshot, reason: str) -> DebateOutcome:
     )
 
 
-def _default_backend() -> ChatBackend:
-    from ticker_dossier.llm.deepseek import DeepSeekBackend
-
-    timeout = _positive_float_env("FINANCE_DEBATE_MODEL_TIMEOUT_SECONDS", 10.0)
-    return DeepSeekBackend(timeout=timeout, read_retries=0)
+def _close_owned_backend(backend: ManagedDebateBackend) -> None:
+    """Best-effort cleanup must not replace a completed research result."""
+    try:
+        backend.close()
+    except Exception:  # noqa: BLE001 - cleanup errors cannot improve the fallback result
+        pass
 
 
 def _chat_content(
@@ -845,14 +852,6 @@ def _bounded_float(value: Any, lower: float, upper: float, default: float) -> fl
     if not math.isfinite(number):
         return default
     return min(max(number, lower), upper)
-
-
-def _positive_float_env(name: str, default: float) -> float:
-    try:
-        value = float(os.environ.get(name, default))
-    except (TypeError, ValueError):
-        return default
-    return value if value > 0 else default
 
 
 def _safe_error(exc: Exception) -> str:

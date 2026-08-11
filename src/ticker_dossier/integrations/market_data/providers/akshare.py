@@ -34,12 +34,12 @@ class AKShareProvider:
         normalized = normalize_symbol(symbol)
         if method == "get_financials":
             return is_a_share(normalized) or normalized.endswith(".HK") or "." not in normalized
-        return is_a_share(normalized)
+        return bool(is_a_share(normalized))
 
     def _client(self) -> Any:
         if self._ak is None:
             try:
-                import akshare as ak  # type: ignore
+                import akshare as ak
             except ImportError as exc:
                 raise ProviderError("akshare package is not installed") from exc
             self._ak = ak
@@ -110,6 +110,7 @@ class AKShareProvider:
     def get_financials(self, symbol: str) -> Financials:
         normalized = normalize_symbol(symbol)
         ak = self._client()
+        fields: dict[str, str | tuple[str, ...]]
         if is_a_share(normalized):
             query_symbol = to_tushare_symbol(normalized)
             data = ak.stock_financial_analysis_indicator_em(symbol=query_symbol, indicator="按报告期")

@@ -23,6 +23,13 @@ if TYPE_CHECKING:
     from ticker_dossier.research.agent import FinanceResearchAgent
 
 
+def _default_finance_agent() -> FinanceResearchAgent:
+    """Build the legacy module-level fallback through the composition root."""
+    from ticker_dossier.bootstrap import build_finance_research_agent
+
+    return build_finance_research_agent()
+
+
 def _finance_memory_add(
     content: str,
     category: str = "preference",
@@ -81,16 +88,18 @@ def _prediction_record(
     confidence: float | None = None,
     thesis: str = "",
 ) -> str:
-    from ticker_dossier.research.agent import FinanceResearchAgent
-
-    return _prediction_record_with_agent(
-        FinanceResearchAgent(),
-        symbol,
-        direction,
-        horizon_days,
-        confidence,
-        thesis,
-    )
+    agent = _default_finance_agent()
+    try:
+        return _prediction_record_with_agent(
+            agent,
+            symbol,
+            direction,
+            horizon_days,
+            confidence,
+            thesis,
+        )
+    finally:
+        agent.close()
 
 
 def _prediction_record_with_agent(
@@ -118,9 +127,11 @@ def _prediction_list(limit: int = 20) -> str:
 
 
 def _prediction_evaluate(include_not_due: bool = False) -> str:
-    from ticker_dossier.research.agent import FinanceResearchAgent
-
-    return _prediction_evaluate_with_agent(FinanceResearchAgent(), include_not_due)
+    agent = _default_finance_agent()
+    try:
+        return _prediction_evaluate_with_agent(agent, include_not_due)
+    finally:
+        agent.close()
 
 
 def _prediction_evaluate_with_agent(

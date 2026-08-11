@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import shlex
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 from ticker_dossier.cli.command_catalog import command_specs, resolve_command
 from ticker_dossier.cli.command_types import CommandResult
@@ -16,11 +16,10 @@ from ticker_dossier.cli.handlers import (
 )
 from ticker_dossier.cli.handlers._shared import json_preview, msg, preview
 from ticker_dossier.integrations.http import proxy_label, test_connectivity
+from ticker_dossier.integrations.market_data import ProviderError
 from ticker_dossier.integrations.scheduler import add_job, list_jobs, render_jobs, run_due_jobs
 from ticker_dossier.integrations.wechat import connector_status, send_markdown, send_text
 from ticker_dossier.research import web as web_services
-from ticker_dossier.research.agent import FinanceResearchAgent
-from ticker_dossier.research.data import ProviderError
 from ticker_dossier.research.evolution import add_memory, extract_learning, render_memories
 from ticker_dossier.research.paper_portfolio import PortfolioError
 from ticker_dossier.research.predictions import (
@@ -37,6 +36,16 @@ from ticker_dossier.research.predictions import (
 from ticker_dossier.runtime.memory import Memory
 from ticker_dossier.runtime.tools import ToolRegistry
 from ticker_dossier.security import SecurityError, guard_write
+
+if TYPE_CHECKING:
+    from ticker_dossier.research.agent import FinanceResearchAgent
+
+
+def _default_finance_agent() -> FinanceResearchAgent:
+    """Build the router's legacy fallback through the composition root."""
+    from ticker_dossier.bootstrap import build_finance_research_agent
+
+    return build_finance_research_agent()
 
 
 class CommandRouter(
@@ -60,7 +69,13 @@ class CommandRouter(
         self.registry = registry
         registered_services = registry.get_service("research")
         registered_finance = getattr(registered_services, "finance", None)
-        self.finance = finance_agent or registered_finance or FinanceResearchAgent()
+        if finance_agent is not None:
+            self.finance = finance_agent
+        elif registered_finance is not None:
+            self.finance = registered_finance
+        else:
+            self.finance = _default_finance_agent()
+            registry.manage(self.finance)
         self.trace = trace
 
         # Composition dependencies are captured at construction time.  Keeping

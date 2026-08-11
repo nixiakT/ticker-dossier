@@ -8,6 +8,7 @@ import pytest
 
 from ticker_dossier.cli.main import TracePrinter, _should_route_finance, main
 from ticker_dossier.cli.commands import CommandRouter
+from ticker_dossier.integrations.market_data import ProviderError
 from ticker_dossier.runtime.context import maybe_compact, truncate_observation
 from ticker_dossier.runtime.loop import (
     AgentLoop,
@@ -20,7 +21,6 @@ from ticker_dossier.runtime.loop import (
     _tool_preview,
 )
 from ticker_dossier.cli.ui import render_trace
-from ticker_dossier.research.data import ProviderError
 from ticker_dossier.research.evolution import add_memory, extract_learning, list_memories
 from ticker_dossier.runtime.tools import Tool, ToolRegistry
 from ticker_dossier.tools.fs import read_tool, write_tool
@@ -1060,7 +1060,7 @@ def test_portfolio_locate_and_migrate_commands_are_non_overwriting(
 ) -> None:
     import ticker_dossier.research.paper_portfolio as portfolio
     from ticker_dossier.research.agent import FinanceResearchAgent
-    from ticker_dossier.research.data import ProviderChain
+    from ticker_dossier.research.market_data import ProviderChain
 
     workspace_dir = tmp_path / "workspace" / ".finance_agent"
     user_dir = tmp_path / "user" / "portfolios"

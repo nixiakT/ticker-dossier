@@ -30,6 +30,8 @@ ticker-dossier/
 │   │   └── protocols.py
 │   ├── llm/
 │   ├── research/
+│   │   ├── data.py
+│   │   ├── market_data/
 │   │   └── portfolio/
 │   ├── tools/
 │   ├── integrations/
@@ -69,6 +71,8 @@ ticker-dossier/
 | `src/ticker_dossier/runtime/protocols.py`、`tools.py` | `ModelBackend`、`Tool` 与 `ToolRegistry` 稳定契约 | 导入具体后端、金融或集成实现 |
 | `src/ticker_dossier/llm/` | 真实模型与离线模型适配器 | 注册工具或决定 CLI 行为 |
 | `src/ticker_dossier/research/` | Provider 选择/合并、金融模型、分析、质量门禁、回测和预测 | 终端交互和通用工具协议 |
+| `src/ticker_dossier/research/data.py` | 旧市场数据 import 的 identity 兼容 facade | 缓存、并发、合并或 Provider 网络实现 |
+| `src/ticker_dossier/research/market_data/` | ProviderChain 工作流及缓存、执行、覆盖诊断、选择/合并策略 | 具体 HTTP/API 适配器或 CLI 渲染 |
 | `src/ticker_dossier/research/portfolio/` | 纸面组合模型、评分和纯渲染 | 文件位置选择和外部行情抓取 |
 | `src/ticker_dossier/research/paper_portfolio.py` | 兼容 facade、账户存储、迁移与显式写操作 | 实时行情 Provider 实现 |
 | `src/ticker_dossier/research/rendering.py` | 把领域结果渲染为面向用户的研究文本 | 访问终端、创建模型或持久化会话 |
@@ -94,6 +98,7 @@ ticker_dossier.tools ─────────────┴──> runtime c
 ticker_dossier.integrations.mcp.runtime ─> runtime Tool + ToolRegistry
 ticker_dossier.integrations.market_data ─> research models/symbols + integrations.http
 ticker_dossier.llm ──────────────────> config + integrations.http + telemetry
+ticker_dossier.research.market_data ─> research models/symbols + integrations.market_data
 ticker_dossier.research ─────────────> config + security + focused integrations
 ticker_dossier.runtime ──────────────> security
 ```
@@ -103,18 +108,19 @@ ticker_dossier.runtime ──────────────> security
 1. `ticker_dossier.runtime` 不导入 `ticker_dossier.cli`、`ticker_dossier.research`、`ticker_dossier.tools`、`ticker_dossier.integrations` 或 `ticker_dossier.llm`。
 2. `ticker_dossier.research` 不导入 CLI 或工具适配器；领域对象可脱离终端和工具注册表测试。
 3. `ticker_dossier.tools` 可以依赖运行时契约和注入的具体能力，但其他层不应依赖 Tool 适配器来复用业务逻辑。
-4. `integrations.market_data` 可使用领域值对象表达结果；多源优先级、合并和覆盖诊断仍由 `research.data.ProviderChain` 决定。
+4. `integrations.market_data` 可使用领域值对象表达结果，但不能反向导入 `research.data` 或 `research.market_data`；多源优先级、合并和覆盖诊断由 `research.market_data.ProviderChain` 决定。
 5. `ticker_dossier.llm` 和其他 `integrations` 是外部适配器；核心运行时只接收它们提供的对象，不反向选择实现。
-6. 具体实现的批量导入、共享服务创建和生命周期管理集中在 `ticker_dossier.bootstrap` 与 `ToolRegistry`。
+6. 具体实现的批量导入、共享服务创建和应用自有资源的生命周期管理集中在 `ticker_dossier.bootstrap` 与 `ToolRegistry`；外部注入对象仍由调用方管理。
 7. CLI handler 可以协调应用服务，但新的领域规则必须先进入 `research`；`command_catalog` 是名称、帮助、补全和 `handler_key` 的单一来源。
 8. `tests` 与 `evals` 只能通过 `ticker_dossier.*` 导入生产代码。
 
-当前保留两个兼容性例外：
+当前不再保留 `research -> llm` 的具体模型依赖：`debate_orchestrator.py`
+只消费 `research.protocols` 中的端口，具体 DeepSeek factory、单次 HTTP call timeout
+和生命周期所有权均由 `bootstrap.py` 注入。仍有一个有意的兼容面：
 
-- `research/data.py` 为保持原有 import 与默认构造行为，会重导出 `integrations.market_data` contract/Provider，并在默认 `ProviderChain` 中选择具体适配器；网络实现本身已经不在领域模块中。
-- `research/debate_orchestrator.py` 在缺少注入后端时仍会延迟创建具体模型适配器，因此领域编排尚未完全摆脱基础设施选择。
+- `research/data.py` 只以对象 identity 重导出旧 contract、Provider、`ProviderChain` 与历史 helper；实现不能重新回流到该 facade。
 
-这些例外是已知技术债，不应成为新增依赖的先例。
+兼容面不应成为新增实现依赖的先例。
 
 ## Composition root
 
@@ -198,21 +204,29 @@ CLI 内部有三条可观察路径：
 市场数据已分成“外部适配”与“领域选择”两个接缝：
 
 ```text
-research.data.ProviderChain
-├── 并发调用、超时/熔断、TTL 缓存
-├── 多源选择、字段合并、交叉验证与覆盖诊断
-└── integrations.market_data
-    ├── base.py                 # Protocol + provider errors
-    ├── _normalization.py       # 外部字段解析与归一化
-    └── providers/
-        ├── yahoo.py
-        ├── akshare.py
-        ├── tushare.py
-        ├── alpha_vantage.py
-        └── sample.py
+research.data                       # 旧 import identity facade
+└── research.market_data.ProviderChain
+    ├── chain.py                    # 四类查询工作流与稳定对象接口
+    ├── constants.py                # 覆盖标签与字段选择常量
+    ├── cache.py                    # 深拷贝 TTL 缓存
+    ├── execution.py                # 完整调用键 single-flight、并发 deadline 与熔断
+    ├── request_state.py            # ContextVar 请求 deadline 与来源覆盖
+    ├── coverage.py                 # 覆盖记录、防御性读取与诊断文本
+    ├── selection.py                # quote/history/financial/news 选择合并纯逻辑
+    ├── configuration.py            # 环境解析、默认 Provider 与状态诊断
+    ├── serialization.py            # 历史行情 CSV
+    └── integrations.market_data
+        ├── base.py                 # Protocol + provider errors
+        ├── _normalization.py       # 外部字段解析与归一化
+        └── providers/
+            ├── yahoo.py
+            ├── akshare.py
+            ├── tushare.py
+            ├── alpha_vantage.py
+            └── sample.py
 ```
 
-具体 Provider/HTTP 逻辑只位于 `integrations.market_data`。`research.data` 保留 `ProviderChain`、合并策略和旧 Provider 名称的 identity re-export，因此已有 `from ticker_dossier.research.data import YahooFinanceProvider` 不会立即失效。Provider contract、能力筛选、缓存深拷贝和熔断均有 characterization tests。
+具体 Provider/HTTP 逻辑只位于 `integrations.market_data`。`research.data` 不再承载策略，只保留旧 Provider、`ProviderChain` 和历史 helper 的 identity re-export，因此已有 `from ticker_dossier.research.data import YahooFinanceProvider` 不会失效。适配层反向依赖、旧对象 identity、选择/合并、覆盖副本、缓存过期、并发 deadline 和熔断均有 characterization/architecture tests。
 
 ## MCP 边界
 
@@ -349,13 +363,13 @@ CI 会构建 wheel，在 checkout 外的新虚拟环境中安装并验证内置 
 
 | 当前边界 | 剩余耦合 | 现有保护 |
 | --- | --- | --- |
-| `research/data.py` | 多源并发、选择、合并、缓存、熔断和覆盖诊断仍在一个领域模块 | Provider contract/选择/cache/circuit characterization tests；旧 import identity re-export |
+| `research/market_data/chain.py` | quote/history/financial/news 四类查询仍由同一个稳定 facade 协调 | 状态机制和纯策略已拆到八个 supporting modules；旧 import identity、single-flight、请求隔离、选择/cache/circuit 与依赖方向测试 |
 | `research/paper_portfolio.py` | 存储 repository、显式迁移和交易 mutation 仍由兼容 facade 集中管理 | `portfolio/models.py`、`scoring.py`、`rendering.py` 已纯化；全写路径冲突测试 |
 | `runtime/loop.py` | 模型收敛、Todo 进度、最终任务边界和报告质量重试仍共享循环 | 工具执行已由 `ToolExecutor` 隔离；session/security/事件顺序回归测试 |
-| `research/debate_orchestrator.py` | prompt、并发模型调用、证据校验和裁决集中，且保留延迟后端 fallback | debate 与金融回归测试 |
+| `research/debate_orchestrator.py` | prompt、并发模型调用、证据校验和裁决仍集中 | 后端只经 protocol/factory 注入；factory 生命周期、异常脱敏、规则 fallback 与 debate 回归测试 |
 | `research/agent.py` | 领域 facade 同时承担任务解析、查询编排和结果聚合 | `ResearchServices` 保证进程内单实例，CLI/Tool 路径复用同一对象 |
 | `cli/main.py` | 参数入口、交互生命周期、trace、首轮模型失败兜底仍集中 | CLI 回归测试与注册表统一关闭路径 |
-| 静态检查 | mypy 目前只覆盖稳定 contract；Ruff 复杂度上限 40 仍是存量回归 ceiling，并有少量逐文件例外 | CI 固定 target 清单、C901 门禁和架构 import tests |
+| 静态检查 | strict mypy 覆盖 runtime、market-data/MCP integration、稳定 CLI contract，并可独立覆盖 `research/market_data`；Ruff 常规模块复杂度上限为 24，两个存量评分函数分别锁在 39/31 | CI 固定 target 清单、收紧后的 C901 门禁和架构 import tests |
 
 `research.data`、`research.paper_portfolio`、`integrations.mcp.client` 和 `runtime.loop` 中的部分重导出是有意保留的兼容面，不代表实现仍位于旧模块。
 
@@ -367,11 +381,17 @@ CI 会构建 wheel，在 checkout 外的新虚拟环境中安装并验证内置 
 python -m ruff check src tests evals
 python -m pytest -q
 python -m compileall -q src/ticker_dossier evals
-python -m mypy \
-  src/ticker_dossier/runtime/{protocols,tools,execution}.py \
+python -m mypy --strict \
+  src/ticker_dossier/bootstrap.py \
+  src/ticker_dossier/security.py \
+  src/ticker_dossier/runtime \
+  src/ticker_dossier/research/protocols.py \
   src/ticker_dossier/research/models.py \
-  src/ticker_dossier/integrations/market_data/base.py \
-  src/ticker_dossier/integrations/mcp/{config,transport,runtime}.py
+  src/ticker_dossier/research/market_data \
+  src/ticker_dossier/llm/{deepseek,fake}.py \
+  src/ticker_dossier/integrations/market_data \
+  src/ticker_dossier/integrations/mcp \
+  src/ticker_dossier/cli/{command_types,command_catalog,custom_commands,dynamic_commands}.py
 ticker-dossier --selfcheck
 python -m ticker_dossier /security
 python -m ticker_dossier /mcp
@@ -389,7 +409,7 @@ python -m build
 - wheel 在 checkout 外仍包含 Skills/MCP 资源并可执行 CLI 自检；
 - README、入口元数据和命令帮助保持一致。
 
-GitHub Actions 把验证分成 quality、Python 3.11/3.13 tests 和 wheel package 三个 job。quality job 运行 Ruff（含 C901）、compileall 与稳定 contract mypy；tests job 触发架构 import gates；package job 只在前两者通过后执行仓库外安装冒烟测试。
+GitHub Actions 把验证分成 quality、Python 3.11/3.13 tests 和 wheel package 三个 job。quality job 运行 Ruff（常规模块 C901≤24，并单独锁住两个存量函数）、compileall 与选定包的 strict mypy；tests job 触发架构 import gates；package job 只在前两者通过后执行仓库外安装冒烟测试。
 
 ## 参考的开源结构
 

@@ -77,9 +77,9 @@ target-version = "py311"
 select = ["C901", "E4", "E7", "E9", "F"]
 
 [tool.ruff.lint.mccabe]
-# Start with a regression ceiling for the legacy scoring/quality functions.
-# New decomposition work should ratchet this number down instead of raising it.
-max-complexity = 40
+# Stable application code is capped here. The two legacy research scoring
+# functions retain explicit, tighter-to-current ceilings in CI until split.
+max-complexity = 24
 
 # Keep the first CI gate useful without forcing an unrelated repository-wide
 # rewrite.  These narrow exceptions document existing debt; new files and all
@@ -87,6 +87,8 @@ max-complexity = 40
 [tool.ruff.lint.per-file-ignores]
 "src/ticker_dossier/cli/main.py" = ["E702"]
 "src/ticker_dossier/research/data.py" = ["F401"]
+"src/ticker_dossier/research/portfolio/scoring.py" = ["C901"]
+"src/ticker_dossier/research/quality.py" = ["C901"]
 "src/ticker_dossier/research/resolver.py" = ["F401"]
 "src/ticker_dossier/research/web.py" = ["F541"]
 "src/ticker_dossier/tools/evolution_tools.py" = ["F541"]

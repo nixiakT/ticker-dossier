@@ -13,7 +13,14 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from typing import Any
 
+from ticker_dossier.research.protocols import (
+    DebateBackend,
+    DebateBackendFactory,
+    ManagedDebateBackend,
+)
+from ticker_dossier.runtime.context import redact_sensitive_text
 from ticker_dossier.runtime.loop import AgentLoop
+from ticker_dossier.runtime.protocols import ModelBackend
 from ticker_dossier.runtime.tools import ToolRegistry
 
 if TYPE_CHECKING:
@@ -26,18 +33,97 @@ class ResearchServices:
 
     finance: FinanceResearchAgent
 
+    def close(self) -> None:
+        """Release research resources owned by this service collection."""
+        self.finance.close()
 
-def build_research_services() -> ResearchServices:
-    """Create one finance facade and its provider lifecycle for an application."""
+
+def build_debate_backend() -> ManagedDebateBackend:
+    """Create the configured model adapter for one debate run.
+
+    Construction intentionally lives in the composition root.  Missing or
+    invalid configuration is allowed to raise here; the research orchestrator
+    converts factory failures into its visible deterministic fallback.
+
+    ``FINANCE_DEBATE_HTTP_CALL_TIMEOUT_SECONDS`` bounds each individual HTTP
+    call.  It is not a total timeout for the multi-phase debate workflow.  We
+    intentionally do not attempt to cancel Python worker threads because an
+    in-flight HTTP call cannot be safely terminated that way.
+    """
+    from ticker_dossier.llm.deepseek import DeepSeekBackend
+
+    legacy_timeout = _positive_float_env("FINANCE_DEBATE_MODEL_TIMEOUT_SECONDS", 10.0)
+    per_call_timeout = _positive_float_env(
+        "FINANCE_DEBATE_HTTP_CALL_TIMEOUT_SECONDS",
+        legacy_timeout,
+    )
+    backend: ManagedDebateBackend = DeepSeekBackend(
+        timeout=per_call_timeout,
+        read_retries=0,
+    )
+    return backend
+
+
+def build_finance_research_agent(
+    *,
+    debate_backend: DebateBackend | None = None,
+    debate_backend_factory: DebateBackendFactory | None = build_debate_backend,
+) -> FinanceResearchAgent:
+    """Create the finance facade used by application and compatibility paths."""
     from ticker_dossier.research.agent import FinanceResearchAgent
 
-    return ResearchServices(finance=FinanceResearchAgent())
+    return FinanceResearchAgent(
+        debate_backend=debate_backend,
+        debate_backend_factory=debate_backend_factory,
+    )
+
+
+def build_research_services(
+    *,
+    debate_backend: DebateBackend | None = None,
+    debate_backend_factory: DebateBackendFactory | None = build_debate_backend,
+) -> ResearchServices:
+    """Create one finance facade and explicitly inject its model port."""
+    return ResearchServices(finance=build_finance_research_agent(
+        debate_backend=debate_backend,
+        debate_backend_factory=debate_backend_factory,
+    ))
+
+
+def build_model_backend(
+    notify: Callable[[str], None] | None = None,
+) -> ModelBackend:
+    """Select the configured runtime adapter, falling back to the offline fake."""
+    try:
+        from ticker_dossier.llm.deepseek import DeepSeekBackend
+
+        backend: ModelBackend = DeepSeekBackend()
+        return backend
+    except Exception as exc:  # noqa: BLE001 - an offline backend is intentional
+        from ticker_dossier.llm.fake import FakeBackend
+
+        if notify is not None:
+            safe_error = redact_sensitive_text(f"{type(exc).__name__}: {exc}")
+            notify(
+                f"[提示] 未启用真后端（{safe_error}），回退 FakeBackend。"
+                "配置 DEEPSEEK_API_KEY 后即用真模型。"
+            )
+        backend = FakeBackend()
+        return backend
 
 
 def _compat_env(primary: str, legacy: str, default: str = "") -> str:
     """Read the renamed setting while preserving existing local setups."""
     value = os.environ.get(primary)
     return os.environ.get(legacy, default) if value is None else value
+
+
+def _positive_float_env(name: str, default: float) -> float:
+    try:
+        value = float(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
 
 
 def build_default_registry(services: ResearchServices | None = None) -> ToolRegistry:
@@ -55,8 +141,11 @@ def build_default_registry(services: ResearchServices | None = None) -> ToolRegi
     from ticker_dossier.tools.web_tools import web_tools
     from ticker_dossier.tools.wechat_tools import wechat_tools
 
-    active_services = services or build_research_services()
+    owns_services = services is None
+    active_services = build_research_services() if services is None else services
     registry = ToolRegistry()
+    if owns_services:
+        registry.manage(active_services)
     registry.provide_service("research", active_services)
     for tool in (
         read_tool,
@@ -92,19 +181,8 @@ def build_agent(
     from ticker_dossier.research.symbols import extract_symbols, normalize_symbol, to_yahoo_symbol
 
     active_registry = registry if registry is not None else build_default_registry()
-    try:
-        from ticker_dossier.llm.deepseek import DeepSeekBackend
-
-        backend: Any = DeepSeekBackend()
-    except Exception as exc:  # noqa: BLE001 - an offline backend is an intentional fallback
-        from ticker_dossier.llm.fake import FakeBackend
-
-        if notify is not None:
-            notify(
-                f"[提示] 未启用真后端（{exc}），回退 FakeBackend。"
-                "配置 DEEPSEEK_API_KEY 后即用真模型。"
-            )
-        backend = FakeBackend()
+    backend = build_model_backend(notify)
+    active_registry.manage(backend)
 
     configured_tools_raw = _compat_env(
         "TICKER_DOSSIER_APPROVED_TOOLS",

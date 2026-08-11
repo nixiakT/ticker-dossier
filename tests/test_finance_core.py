@@ -6,9 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from ticker_dossier.research.agent import FinanceResearchAgent
+from ticker_dossier.integrations.market_data import ProviderError, SampleDataProvider
+from ticker_dossier.integrations.market_data._normalization import _news_matches
+from ticker_dossier.research.agent import FinanceResearchAgent, _compact_error
 from ticker_dossier.research.backtest import StrategyConfig, backtest_moving_average_cross, format_backtest, parse_strategy
-from ticker_dossier.research.data import ProviderChain, ProviderError, SampleDataProvider, _news_matches
+from ticker_dossier.research.market_data import ProviderChain
 from ticker_dossier.research.models import Candle, Financials, NewsItem, Quote, StockSnapshot, utc_now_iso
 from ticker_dossier.research.history_learning import learn_from_history, render_learning, update_history_learning_skill
 from ticker_dossier.research.paper_portfolio import (
@@ -35,6 +37,18 @@ from ticker_dossier.research.resolver import resolve_symbol
 from ticker_dossier.research.symbols import extract_symbols, normalize_symbol, to_yahoo_symbol
 from ticker_dossier.research.web import web_fetch, web_search
 from ticker_dossier.security import SecurityError
+
+
+def test_finance_facade_compacts_errors_only_after_redacting_secrets() -> None:
+    secret = "facade-provider-secret-123456789"
+    error = RuntimeError(
+        "x" * 160 + f" https://provider.test/query?api_key={secret}&symbol=AAPL"
+    )
+
+    compact = _compact_error(error)
+
+    assert secret not in compact
+    assert "[REDACTED_SECRET]" in compact
 
 
 def test_symbol_normalization_handles_common_markets() -> None:

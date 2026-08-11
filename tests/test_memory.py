@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from pathlib import Path
+
+import ticker_dossier.runtime.memory as memory_module
 from ticker_dossier.runtime.memory import KVMemory, Memory
 from ticker_dossier.tools.memory_tools import remember_tool
 from ticker_dossier.cli.commands import CommandRouter
@@ -32,6 +35,11 @@ def test_kv_memory_updates_and_forgets(tmp_path) -> None:  # noqa: ANN001
 
 def test_remember_tool_writes_project_memory(tmp_path, monkeypatch) -> None:  # noqa: ANN001
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        memory_module,
+        "DEFAULT_MEMORY_PATH",
+        Path(".finance_agent/project_memory.md"),
+    )
     output = remember_tool.run(note="包管理器用 pnpm，不要用 npm")
     assert "已记住" in output
     assert "pnpm" in (
@@ -44,6 +52,12 @@ def test_first_default_write_preserves_legacy_project_memory(
     monkeypatch,
 ) -> None:  # noqa: ANN001
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        memory_module,
+        "DEFAULT_MEMORY_PATH",
+        Path(".finance_agent/project_memory.md"),
+    )
+    monkeypatch.setattr(memory_module, "LEGACY_MEMORY_PATH", Path("MEMORY.md"))
     legacy = tmp_path / "MEMORY.md"
     legacy.write_text("# 项目记忆\n\n- 港股保留展示代码\n", encoding="utf-8")
 
@@ -59,6 +73,11 @@ def test_first_default_write_preserves_legacy_project_memory(
 
 def test_remember_slash_command_is_deterministic(tmp_path, monkeypatch) -> None:  # noqa: ANN001
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        memory_module,
+        "DEFAULT_MEMORY_PATH",
+        Path(".finance_agent/project_memory.md"),
+    )
     router = CommandRouter(ToolRegistry())
     output = router.handle("/remember 港股报告保留展示代码").output
     assert "已写入跨会话项目记忆" in output

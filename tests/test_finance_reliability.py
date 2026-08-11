@@ -9,18 +9,16 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-from ticker_dossier.research.agent import FinanceResearchAgent
-from ticker_dossier.research.data import (
+from ticker_dossier.integrations.market_data import (
     AKShareProvider,
-    ProviderChain,
     ProviderError,
     SampleDataProvider,
     TushareProvider,
     YahooFinanceProvider,
-    enrich_financial_pe,
-    _news_keywords,
-    _news_matches,
 )
+from ticker_dossier.integrations.market_data._normalization import _news_keywords, _news_matches
+from ticker_dossier.research.agent import FinanceResearchAgent
+from ticker_dossier.research.market_data import ProviderChain, enrich_financial_pe
 from ticker_dossier.research.models import Candle, Financials, NewsItem, Quote, StockSnapshot
 from ticker_dossier.research.quality import evaluate_quality_gate, render_quality_screen
 from ticker_dossier.research.resolver import SymbolCandidate, resolve_symbol, resolve_symbol_text

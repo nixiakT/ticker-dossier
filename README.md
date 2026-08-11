@@ -125,7 +125,7 @@ flowchart LR
     K["Packaged resources<br/>Skills · MCP defaults"] --> T
 ```
 
-`bootstrap.py` 创建单一 `ResearchServices` 并放入 `ToolRegistry`，CLI 与 Tool 适配器复用同一个研究服务。`runtime.execution` 统一处理权限、复用回执和副作用边界；市场 Provider 与 MCP 的配置、传输和生命周期都位于 `integrations`。
+`bootstrap.py` 创建单一 `ResearchServices` 并放入 `ToolRegistry`，CLI 与 Tool 适配器复用同一个研究服务。`runtime.execution` 统一处理权限、复用回执和副作用边界；市场 Provider 与 MCP 的配置、传输实现在 `integrations`，应用自行创建的研究服务、模型后端与 MCP runtime 则由 composition root 和 `ToolRegistry` 统一关闭。
 
 ```text
 src/ticker_dossier/
@@ -193,17 +193,23 @@ src/ticker_dossier/
 python -m pip install -e ".[dev,providers]"
 python -m ruff check src tests evals
 python -m pytest -q
-python -m mypy \
-  src/ticker_dossier/runtime/{protocols,tools,execution}.py \
+python -m mypy --strict \
+  src/ticker_dossier/bootstrap.py \
+  src/ticker_dossier/security.py \
+  src/ticker_dossier/runtime \
+  src/ticker_dossier/research/protocols.py \
   src/ticker_dossier/research/models.py \
-  src/ticker_dossier/integrations/market_data/base.py \
-  src/ticker_dossier/integrations/mcp/{config,transport,runtime}.py
+  src/ticker_dossier/research/market_data \
+  src/ticker_dossier/llm/{deepseek,fake}.py \
+  src/ticker_dossier/integrations/market_data \
+  src/ticker_dossier/integrations/mcp \
+  src/ticker_dossier/cli/{command_types,command_catalog,custom_commands,dynamic_commands}.py
 python -m compileall -q src/ticker_dossier evals
 python -m ticker_dossier --selfcheck
 python -m build
 ```
 
-CI 在 Python 3.11/3.13 运行测试，并执行 Ruff（含复杂度门禁）、稳定契约 mypy、依赖方向测试，以及仓库外 wheel 安装/资源自检。评估工具位于 `evals/`，可版本化项目 Skills 位于 `skills/`；提交前请确认没有加入凭据、个人状态或生成目录。
+CI 在 Python 3.11/3.13 运行测试，并执行 Ruff（含复杂度门禁）、选定核心包的 strict mypy、依赖方向测试，以及仓库外 wheel 安装/资源自检。评估工具位于 `evals/`，可版本化项目 Skills 位于 `skills/`；提交前请确认没有加入凭据、个人状态或生成目录。
 
 ## License
 

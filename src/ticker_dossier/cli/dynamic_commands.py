@@ -140,9 +140,9 @@ def _prompt_arguments(prompt: dict[str, Any], raw: list[str]) -> dict[str, str]:
     for item in declared:
         name = str(item["name"])
         if name not in values:
-            value = next(available, None)
-            if value is not None:
-                values[name] = value
+            positional_value = next(available, None)
+            if positional_value is not None:
+                values[name] = positional_value
         if item.get("required") and not values.get(name):
             raise ValueError(f"MCP prompt 缺少必填参数: {name}")
     return values

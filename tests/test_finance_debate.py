@@ -24,12 +24,13 @@ class ScriptedDebateBackend:
         self.invented_number = invented_number
         self.fail_phase = fail_phase
         self.calls: list[list[dict[str, Any]]] = []
+        self.closed = 0
         self._lock = Lock()
 
     def chat(
         self,
         messages: list[dict[str, Any]],
-        tools: list[dict] | None = None,
+        tools: list[dict[str, Any]] | None = None,
         temperature: float = 0.0,
     ) -> dict[str, Any]:
         del temperature
@@ -72,6 +73,9 @@ class ScriptedDebateBackend:
             raise AssertionError(f"unexpected prompt: {system}")
         assert tools == []
         return {"role": "assistant", "content": json.dumps(payload, ensure_ascii=False), "tool_calls": []}
+
+    def close(self) -> None:
+        self.closed += 1
 
 
 class FailingBackend:
@@ -127,6 +131,85 @@ def test_model_debate_uses_five_independent_calls_two_rebuttals_and_judge() -> N
     assert '"id": "Bear Agent.conclusion"' in bull_rebuttal[1]["content"]
     assert outcome.rebuttals[0].responses[0].target_claim_id == "Bear Agent.conclusion"
     assert '"rebuttals"' in judges[0][1]["content"]
+    assert backend.closed == 0
+
+
+def test_model_debate_backend_factory_is_called_once_for_multiple_symbols_and_closed() -> None:
+    backend = ScriptedDebateBackend()
+    factory_calls = 0
+
+    def factory() -> ScriptedDebateBackend:
+        nonlocal factory_calls
+        factory_calls += 1
+        return backend
+
+    outcomes = ModelDebateOrchestrator(backend_factory=factory).run([
+        _snapshot("AAPL"),
+        _snapshot("MSFT"),
+    ])
+
+    assert [outcome.mode for outcome in outcomes] == [MODEL_MODE, MODEL_MODE]
+    assert factory_calls == 1
+    assert len(backend.calls) == 16
+    assert backend.closed == 1
+
+
+def test_direct_backend_takes_priority_and_remains_caller_owned() -> None:
+    backend = ScriptedDebateBackend()
+    factory_calls = 0
+
+    def factory() -> ScriptedDebateBackend:
+        nonlocal factory_calls
+        factory_calls += 1
+        return ScriptedDebateBackend()
+
+    outcome = ModelDebateOrchestrator(
+        backend=backend,
+        backend_factory=factory,
+    ).run([_snapshot()])[0]
+
+    assert outcome.mode == MODEL_MODE
+    assert factory_calls == 0
+    assert backend.closed == 0
+
+
+def test_factory_backend_is_closed_after_model_failure() -> None:
+    backend = ScriptedDebateBackend(fail_phase="judge")
+
+    outcome = ModelDebateOrchestrator(backend_factory=lambda: backend).run([_snapshot()])[0]
+
+    assert outcome.mode == RULE_MODE
+    assert backend.closed == 1
+
+
+def test_backend_factory_failure_is_redacted_for_every_symbol() -> None:
+    def factory() -> ScriptedDebateBackend:
+        raise RuntimeError("backend setup failed token=factory-secret-value")
+
+    outcomes = ModelDebateOrchestrator(backend_factory=factory).run([
+        _snapshot("AAPL"),
+        _snapshot("MSFT"),
+    ])
+
+    assert [outcome.mode for outcome in outcomes] == [RULE_MODE, RULE_MODE]
+    assert all("factory-secret-value" not in outcome.fallback_reason for outcome in outcomes)
+    assert all("[REDACTED_SECRET]" in outcome.fallback_reason for outcome in outcomes)
+
+
+def test_backend_factory_returning_none_has_explicit_fallback() -> None:
+    outcome = ModelDebateOrchestrator(backend_factory=lambda: None).run([_snapshot()])[0]
+
+    assert outcome.mode == RULE_MODE
+    assert outcome.fallback_reason == "模型辩论后端未配置"
+
+
+def test_model_debate_without_injected_backend_uses_visible_rule_fallback() -> None:
+    outcome = ModelDebateOrchestrator().run([_snapshot()])[0]
+    output = render_debate_outcomes([outcome])
+
+    assert outcome.mode == RULE_MODE
+    assert outcome.fallback_reason == "模型辩论后端未配置"
+    assert "模型辩论不可用，已切换到规则模式" in output
 
 
 def test_model_debate_rejects_invented_numbers_and_caps_confidence() -> None:
@@ -194,7 +277,7 @@ def test_debate_fetches_one_snapshot_and_records_validated_judge_prediction(
     monkeypatch.setattr(predictions, "PREDICTION_PATH", tmp_path / "predictions.jsonl")
     provider = CountingProvider()
     backend = ScriptedDebateBackend()
-    agent = FinanceResearchAgent(provider=provider, debate_backend=backend)
+    agent = FinanceResearchAgent(provider=provider, debate_backend_factory=lambda: backend)
 
     output = agent.debate_stocks(["AAPL"])
     records = load_predictions(tmp_path / "predictions.jsonl")

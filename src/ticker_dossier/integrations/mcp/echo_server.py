@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json
 import sys
+from typing import Any
 
 TOOLS = [{
     "name": "echo",
@@ -10,7 +11,7 @@ TOOLS = [{
 }]
 
 
-def handle(req: dict) -> dict | None:
+def handle(req: dict[str, Any]) -> dict[str, Any] | None:
     method = req.get("method")
     rid = req.get("id")
     if method == "initialize":

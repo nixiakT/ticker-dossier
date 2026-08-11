@@ -19,6 +19,11 @@ from .._normalization import (
 from ..base import ProviderError
 
 
+def _scaled_market_cap(value: Any) -> float | None:
+    market_cap = _to_float(value)
+    return market_cap * 10_000 if market_cap is not None else None
+
+
 class TushareProvider:
     name = "Tushare Pro"
 
@@ -30,6 +35,13 @@ class TushareProvider:
     def available(self) -> bool:
         return bool(self.token)
 
+    def close(self) -> None:
+        pro = self._pro
+        close = getattr(pro, "close", None)
+        if callable(close):
+            close()
+        self._pro = None
+
     def supports(self, method: str, symbol: str, *args: Any) -> bool:
         return method != "get_news" and is_a_share(symbol)
 
@@ -38,7 +50,7 @@ class TushareProvider:
             raise ProviderError("missing TUSHARE_TOKEN")
         if self._pro is None:
             try:
-                import tushare as ts  # type: ignore
+                import tushare as ts
             except ImportError as exc:
                 raise ProviderError("tushare package is not installed") from exc
             self._pro = ts.pro_api(self.token, timeout=self.timeout)
@@ -62,6 +74,7 @@ class TushareProvider:
         previous = daily.iloc[-2] if len(daily) > 1 else None
         basics, basics_error = self._daily_basic(pro, ts_code)
         name = self._stock_name(pro, ts_code)
+        market_cap = _scaled_market_cap(basics.get("total_mv"))
         price = _to_float(latest.get("close"))
         previous_close = _to_float(previous.get("close")) if previous is not None else _to_float(latest.get("pre_close"))
         change = price - previous_close if price is not None and previous_close not in (None, 0) else _to_float(latest.get("change"))
@@ -83,7 +96,7 @@ class TushareProvider:
             change=change,
             change_percent=change_percent,
             volume=_lots_to_shares(latest.get("vol")),
-            market_cap=_to_float(basics.get("total_mv")) * 10_000 if basics.get("total_mv") is not None else None,
+            market_cap=market_cap,
             pe_ratio=_to_float(basics.get("pe_ttm") or basics.get("pe")),
             source=self.name,
             as_of=_format_trade_date(trade_date),
@@ -115,6 +128,7 @@ class TushareProvider:
         normalized, ts_code = self._require_a_share(symbol)
         pro = self._client()
         basics, basics_error = self._daily_basic(pro, ts_code)
+        market_cap = _scaled_market_cap(basics.get("total_mv"))
         income, cashflow, fina_indicator, report_date = self._aligned_reports(pro, ts_code)
         revenue = _to_float(income.get("total_revenue") or income.get("revenue"))
         net_income = _to_float(income.get("n_income_attr_p") or income.get("net_profit"))
@@ -132,7 +146,7 @@ class TushareProvider:
             currency="CNY",
             period_type="REPORTED",
             fetched_at=utc_now_iso(),
-            market_cap=_to_float(basics.get("total_mv")) * 10_000 if basics.get("total_mv") is not None else None,
+            market_cap=market_cap,
             pe_ratio=_to_float(basics.get("pe_ttm") or basics.get("pe")),
             eps=_to_float(fina_indicator.get("eps")),
             revenue=revenue,

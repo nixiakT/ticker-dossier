@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from ticker_dossier.research.models import Candle, Financials
+from ticker_dossier.security import redact_sensitive_text
 
 
 _FINANCIAL_FIELDS = (
@@ -53,7 +54,7 @@ def _lots_to_shares(value: Any) -> int | None:
 
 
 def _compact_provider_error(exc: Exception, limit: int = 180) -> str:
-    text = " ".join(str(exc).split()) or exc.__class__.__name__
+    text = " ".join(redact_sensitive_text(str(exc)).split()) or exc.__class__.__name__
     if len(text) <= limit:
         return text
     return text[:limit] + "..."

@@ -5,6 +5,7 @@ import subprocess
 import sys
 import time
 
+import httpx
 import pytest
 
 from ticker_dossier.integrations.market_data import (
@@ -18,7 +19,7 @@ from ticker_dossier.integrations.market_data import (
     YahooFinanceProvider,
 )
 from ticker_dossier.research import data as legacy_data
-from ticker_dossier.research.data import ProviderChain
+from ticker_dossier.research.market_data import ProviderChain
 from ticker_dossier.research.models import Quote
 
 
@@ -83,6 +84,34 @@ def test_provider_selection_respects_structural_support_checks() -> None:
 
     assert chain.get_quote("aapl").source == "SUPPORTED"
     assert chain.source_coverage("get_quote")["successful_real_sources"] == ["SUPPORTED"]
+
+
+def test_provider_http_error_redacts_api_key_from_coverage_and_final_error() -> None:
+    secret = "provider-query-secret-123456789"
+
+    class LeakyProvider:
+        name = "LEAKY"
+
+        def get_quote(self, symbol: str) -> Quote:
+            request = httpx.Request(
+                "GET",
+                f"https://provider.test/query?function=quote&apikey={secret}&symbol={symbol}",
+            )
+            httpx.Response(401, request=request).raise_for_status()
+            raise AssertionError("raise_for_status must fail")
+
+    chain = ProviderChain(providers=[LeakyProvider()])
+
+    with pytest.raises(ProviderError) as captured:
+        chain.get_quote("AAPL")
+
+    coverage = chain.source_coverage("get_quote")
+    coverage_error = coverage["failed_real_sources"][0]["error"]
+    final_error = str(captured.value)
+    assert secret not in coverage_error
+    assert secret not in final_error
+    assert "[REDACTED_SECRET]" in coverage_error
+    assert "[REDACTED_SECRET]" in final_error
 
 
 def test_quote_cache_returns_independent_values_and_preserves_coverage(
