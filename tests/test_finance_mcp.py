@@ -4,10 +4,10 @@ import json
 
 import pytest
 
-from agent.permissions import check
-from mcp.client import MCPClient
-from mcp.finance_server import calculate_risk_budget, handle
-from tools.base import build_default_registry
+from ticker_dossier.runtime.permissions import check
+from ticker_dossier.integrations.mcp.client import MCPClient
+from ticker_dossier.integrations.mcp.finance_server import calculate_risk_budget, handle
+from ticker_dossier.bootstrap import build_default_registry
 
 
 def test_risk_budget_is_deterministic_and_research_only() -> None:

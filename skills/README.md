@@ -1,10 +1,10 @@
 # skills
 
-`skills/` 保存项目级操作流程。Skill 不是一次函数调用，而是一份按需加载的领域说明；模型先查看目录，再通过 `read_skill` 把选中的 `SKILL.md` 加入上下文。
+`skills/` 只保存可编辑的项目级操作流程；加载器实现位于安装包内。Skill 不是一次函数调用，而是一份按需加载的领域说明；模型先查看目录，再通过 `read_skill` 把选中的 `SKILL.md` 加入上下文。
 
 ## 主要入口
 
-- `loader.py`：扫描、解析和校验 `skills/*/SKILL.md`。
+- `src/ticker_dossier/skills/loader.py`：扫描、解析和校验 `skills/*/SKILL.md`。
 - `example-skill/`：最小示例。
 - `finance-stock/`、`finance-history-learning/`、`finance-research-evolution/`：金融研究流程。
 - `trace2skill/`：从已审查 Trace 沉淀可复用流程。

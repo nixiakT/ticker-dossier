@@ -4,10 +4,10 @@ from datetime import date, timedelta
 
 import pytest
 
-from finance.agent import FinanceResearchAgent
-from finance.history_learning import calibrate_momentum_signal
-from finance.models import Candle
-from finance.predictions import render_prediction_record
+from ticker_dossier.research.agent import FinanceResearchAgent
+from ticker_dossier.research.history_learning import calibrate_momentum_signal
+from ticker_dossier.research.models import Candle
+from ticker_dossier.research.predictions import render_prediction_record
 
 
 def _rising_candles(count: int) -> list[Candle]:
@@ -48,7 +48,7 @@ def test_walk_forward_calibration_withholds_probability_for_small_sample() -> No
 def test_prediction_record_distinguishes_calibrated_rate_from_signal_strength(
     tmp_path, monkeypatch: pytest.MonkeyPatch  # noqa: ANN001
 ) -> None:
-    import finance.predictions as predictions
+    import ticker_dossier.research.predictions as predictions
 
     class Provider:
         name = "HISTORY"

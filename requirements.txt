@@ -1,20 +1,3 @@
-# --- 核心（Day1 起就需要）---
-httpx>=0.27          # 调 DeepSeek API（backend/client.py）/ web_fetch
-pydantic>=2.0        # 工具 schema 校验
-prompt_toolkit>=3.0  # CLI 行编辑、历史记录、快捷键和命令补全
-pandas>=2.0          # 金融指标与策略回测
-numpy>=1.24          # pandas/指标计算基础依赖
-yfinance>=0.2        # 可选数据源，后续可替换 Provider 使用
-tushare>=1.4         # 可选 A 股数据源，需要 TUSHARE_TOKEN
-akshare>=1.16        # 可选 A 股数据源，东方财富等公开财经数据接口
-pytest>=8.0          # 本地回归测试
-
-# --- Day7 web_fetch 工具 ---
-markdownify>=0.13    # web_fetch: HTML -> markdown
-# ripgrep(rg) 请用系统包管理器安装：brew install ripgrep / apt install ripgrep（Day6 grep 工具）
-
-# --- Day8 MCP（可选，最小客户端可不依赖官方 SDK）---
-# mcp>=1.0           # 官方 SDK，做对照时再装
-
-# 说明：本课程大脑走 DeepSeek API，不本地部署模型、不做 LoRA，故无需 vllm/peft/torch 等重依赖。
-# （Day2 的 nanoGPT 实验请用单独的 conda 环境安装 torch，避免污染 agent 环境。）
+# Compatibility install for existing workflows.  Project metadata and
+# dependency groups are defined in pyproject.toml.
+-e .[dev,providers]

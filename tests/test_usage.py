@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from agent.cli import TracePrinter
-from agent.usage import add_usage, format_usage, normalize_usage
+from ticker_dossier.cli.main import TracePrinter
+from ticker_dossier.telemetry import add_usage, format_usage, normalize_usage
 
 
 def test_normalize_usage_and_optional_cost(monkeypatch) -> None:  # noqa: ANN001

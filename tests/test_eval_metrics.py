@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from eval.ablation import WITHOUT_POLICY, WITH_POLICY, summarize
+from evals.ablation import WITHOUT_POLICY, WITH_POLICY, summarize
 
 
 def test_replay_ablation_has_all_demo_day_metrics() -> None:

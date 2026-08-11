@@ -9,8 +9,8 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-from finance.agent import FinanceResearchAgent
-from finance.data import (
+from ticker_dossier.research.agent import FinanceResearchAgent
+from ticker_dossier.research.data import (
     AKShareProvider,
     ProviderChain,
     ProviderError,
@@ -21,14 +21,14 @@ from finance.data import (
     _news_keywords,
     _news_matches,
 )
-from finance.models import Candle, Financials, NewsItem, Quote, StockSnapshot
-from finance.quality import evaluate_quality_gate, render_quality_screen
-from finance.resolver import SymbolCandidate, resolve_symbol, resolve_symbol_text
-from finance.symbols import extract_symbols
+from ticker_dossier.research.models import Candle, Financials, NewsItem, Quote, StockSnapshot
+from ticker_dossier.research.quality import evaluate_quality_gate, render_quality_screen
+from ticker_dossier.research.resolver import SymbolCandidate, resolve_symbol, resolve_symbol_text
+from ticker_dossier.research.symbols import extract_symbols
 
 
 def test_english_company_name_is_not_treated_as_a_literal_ticker(monkeypatch: pytest.MonkeyPatch) -> None:
-    import finance.resolver as resolver
+    import ticker_dossier.research.resolver as resolver
 
     monkeypatch.setattr(
         resolver,
@@ -58,7 +58,7 @@ def test_symbol_extraction_rejects_prompt_words_and_years() -> None:
 
 
 def test_unrelated_search_candidate_is_not_auto_selected(monkeypatch: pytest.MonkeyPatch) -> None:
-    import finance.resolver as resolver
+    import ticker_dossier.research.resolver as resolver
 
     monkeypatch.setattr(resolver, "_eastmoney_candidates", lambda query: [])
     monkeypatch.setattr(resolver, "_yahoo_candidates", lambda query: [])

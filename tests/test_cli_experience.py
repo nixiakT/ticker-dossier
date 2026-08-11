@@ -5,18 +5,19 @@ import io
 
 import pytest
 
-from agent.command_catalog import CompletionItem, command_completions, command_specs, completion_meta
-from agent.custom_commands import load_custom_commands
-from agent.dynamic_commands import DynamicSlashCommands
-from agent.input import (
+from ticker_dossier.cli.command_catalog import CompletionItem, command_completions, command_specs, completion_meta
+from ticker_dossier.cli.custom_commands import load_custom_commands
+from ticker_dossier.cli.dynamic_commands import DynamicSlashCommands
+from ticker_dossier.cli.input import (
     MAX_COMPLETION_ROWS,
     InteractiveInput,
     SlashCompletionItem,
     SlashCompletionPanel,
     _cell_width,
     _sanitize_hint,
+    clean_user_input,
 )
-from agent.ui import _display_width, render_help, render_status_bar, render_tool_card, render_welcome
+from ticker_dossier.cli.ui import _display_width, render_help, render_status_bar, render_tool_card, render_welcome
 
 
 def test_command_catalog_drives_missing_completions() -> None:
@@ -31,11 +32,16 @@ def test_command_catalog_drives_missing_completions() -> None:
     assert len({spec.name for spec in command_specs()}) == len(command_specs())
 
 
+def test_input_cleaner_accepts_new_and_legacy_prompt_prefixes() -> None:
+    assert clean_user_input("ticker-dossier > /status") == "/status"
+    assert clean_user_input("finance-agent > /status") == "/status"
+
+
 def test_interactive_input_uses_catalog_by_default(monkeypatch) -> None:  # noqa: ANN001
     monkeypatch.setattr(InteractiveInput, "_build_prompt_session", lambda self: None)
     monkeypatch.setattr(InteractiveInput, "_setup_readline_fallback", lambda self: None)
 
-    reader = InteractiveInput("finance-agent > ")
+    reader = InteractiveInput("ticker-dossier > ")
 
     assert reader.commands == command_completions()
 
@@ -97,7 +103,7 @@ def test_reasonix_style_completion_is_rendered_and_keyboard_driven(tmp_path) -> 
                 enable_cpr=False,
             )
             reader = InteractiveInput(
-                "finance-agent > ",
+                "ticker-dossier > ",
                 input_stream=pipe_input,
                 output_stream=output,
                 history_path=tmp_path / "history",
@@ -148,7 +154,7 @@ def test_completion_keeps_history_navigation_and_refreshes_once_per_slash_entry(
     async def scenario() -> None:
         with create_pipe_input() as pipe_input:
             reader = InteractiveInput(
-                "finance-agent > ",
+                "ticker-dossier > ",
                 completion_refresh=refresh,
                 input_stream=pipe_input,
                 output_stream=DummyOutput(),
@@ -187,7 +193,7 @@ def test_welcome_adapts_to_small_and_large_terminals(monkeypatch) -> None:  # no
     for width in (20, 60, 100):
         output = render_welcome(width=width)
         assert max(_display_width(line) for line in output.splitlines()) <= width
-        assert "Finance Agent" in output
+        assert "TickerDossier" in output
 
     wide = render_welcome(width=100)
     assert "招财进宝符" in wide
@@ -195,6 +201,7 @@ def test_welcome_adapts_to_small_and_large_terminals(monkeypatch) -> None:  # no
 
 
 def test_help_is_catalog_backed_and_compact(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.delenv("TICKER_DOSSIER_LANG", raising=False)
     monkeypatch.setenv("FINANCE_AGENT_LANG", "zh")
 
     output = render_help()
@@ -206,6 +213,9 @@ def test_help_is_catalog_backed_and_compact(monkeypatch) -> None:  # noqa: ANN00
 
     narrow = render_help(width=20)
     assert max(_display_width(line) for line in narrow.splitlines()) <= 20
+
+    monkeypatch.setenv("TICKER_DOSSIER_LANG", "en")
+    assert "ticker-dossier command menu" in render_help()
 
 
 def test_status_bar_surfaces_runtime_capabilities() -> None:

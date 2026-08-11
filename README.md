@@ -1,388 +1,192 @@
-Language / 语言: 中文 | [English](README_EN.md)
+<div align="center">
 
-# finance-agent
+# TickerDossier
 
-命令行股票研究助手。它面向行情查询、基本面研究、新闻核验、技术指标、多智能体辩论和简单策略回测，只做研究辅助，不做自动交易。
+**证据优先、边界清晰的终端股票研究助手**
 
-## 能力
+把行情、基本面、新闻、反证与风险检查组织成可追溯的研究档案，面向 A 股、港股和美股，支持纸面组合、MCP / Skill 扩展与本地优先的工作流。
 
-- 股票行情：价格、涨跌、成交量、市值、数据源和时间。
-- 标的解析：公司名、简称、中文名、英文名或 ticker 自动解析为 A 股/港股/美股候选代码。
-- 历史价格与技术指标：MA5 / MA20 / MA60、RSI14、MACD、波动率、近 1 月 / 3 月 / 1 年收益率。
-- 基本面：并发查询 Tushare、AKShare 和 Yahoo 等适用真实来源，保留优先源已有值，再按字段兼容规则补齐 PE、EPS、营收、利润、现金流、ROE 和利润率；最终缺失会明确标注。
-- 新闻和网页核验：新闻按 ticker/公司名关键词过滤；接口失败只会记为数据失败，不会伪装成一条“新闻”。
-- 结构化报告：价格、走势、基本面、技术面、新闻、风险和研究结论。
-- 研究质量门禁：信息丰富度 A/B/C、数据缺口、快速否决/重审信号、下一步核验。
-- 投资框架：巴菲特/芒格、段永平、李录、达利欧。
-- 多智能体辩论：Bull、Bear、Value、Macro/Risk、Anti-Bias 五个模型独立分析，Bull/Bear 交叉反驳后由独立 Judge 裁决；所有观点引用同一份编号证据，代码校验数字和主观信号强度。模型不可用时会在终端明确提示并切换到原有 11 角色规则模式。
-- 预测评分闭环：记录每次看涨/看跌/中性判断，区分启发式、用户/模型主观信号与历史校准命中率，并按真实后续价格评分。
-- 历史学习预测：从历史 K 线 walk-forward 学习可解释特征；未校准数值只显示为信号强度，不冒充概率。
-- 模拟投资账户：给 agent 100 万纸面资金，按股票池评分、计算买入数量和仓位，并每日记录净值；支持只读诊断弱持仓和替换候选。
-- 策略辅助：移动均线交叉策略回测。
-- 自选股简报：批量生成跟踪摘要。
-- 微信连接与定时推送：支持 dry-run outbox、企业微信 webhook、本地 relay 和本地定时简报任务。
-- Trace2Skill：把成功任务轨迹沉淀为项目 Skill。
-- 通用 Agent 工具：read/write/bash/edit/grep/glob/task_list，支持现场随机代码任务。
-- 动态 CLI：内置命令、Markdown 自定义命令、项目 Skill 和 MCP prompt 共用一个模糊补全菜单；欢迎页、帮助页、底栏和工具卡片会适应终端宽度。
-- MCP：可通过 `.mcp.json` 连接多个 stdio server，工具以 `mcp__<server>__<tool>` 命名，并提供超时、状态查询和进程关闭。
-- Skills：系统层只提供经校验的 Skill 名称索引；描述供 `/skills`/补全展示，需要时再通过 `read_skill` 以低权限上下文加载正文。
-- 跨会话记忆与规划：`MEMORY.md` / KV 记忆持久保存项目约定；复杂任务用 `task_list` 建立并更新待办。
-- 可观测性：trace 展示模型回合、工具、耗时和服务端 token usage；配置模型单价后可估算任务成本。
-- 安全层：工作区权限、危险命令拦截、疑似 secret 写入拦截、不可信内容隔离。
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-2ea44f)](LICENSE)
+
+[English](README_EN.md) · [快速开始](#快速开始) · [能力](#核心能力) · [架构](docs/ARCHITECTURE.md)
+
+</div>
+
+> [!CAUTION]
+> TickerDossier 只用于研究辅助和纸面组合实验：不连接券商、不执行真实交易，也不构成投资建议。
+
+## 十秒体验
+
+```bash
+ticker-dossier /quote AAPL
+ticker-dossier /quality AAPL 1y
+ticker-dossier "比较 NVDA 和 AMD 的基本面、近期走势与主要风险"
+```
+
+前两个 slash command 是可重复的确定性入口；自然语言任务由 Agent 循环协调模型与工具。没有模型密钥时仍可运行自检、帮助和离线后端。
+
+## 核心能力
+
+| | 能力 | 你得到什么 |
+| --- | --- | --- |
+| 🔎 | **证据化研究** | 行情、历史价格、基本面与新闻，并保留来源、时间戳、覆盖率和数据缺口。 |
+| 📊 | **结构化分析** | 技术指标、质量门禁、研究档案、标的对比、多视角审查和均线策略回测。 |
+| 🧪 | **纸面实验** | 预测记账与到期评分、模拟持仓、交易流水和净值；始终不触达真实券商。 |
+| 🧩 | **可扩展运行时** | ReAct 工具循环、MCP、Skills、记忆、确认机制，以及无密钥时的 `FakeBackend`。 |
+
+Provider 可用性取决于网络、凭据和上游服务。TickerDossier 会明确标记样例回退、冲突字段与缺失数据，不用模型猜测补数。
 
 ## 快速开始
 
-从仓库根目录使用 Python 3.11 创建独立环境；不要求机器上预先存在某个 conda 环境：
-
 ```bash
-cd /path/to/mini-openclaw
+git clone https://github.com/nixiakT/ticker-dossier.git
+cd ticker-dossier
+
 python3.11 -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements.txt
-python -m agent.cli --selfcheck
-python -m agent.cli
-```
+python -m pip install --upgrade pip
+python -m pip install -e .
 
-`/path/to/mini-openclaw` 替换为实际克隆目录。仓库也保留 `environment.yml` 供需要 conda 的用户自行创建环境，但演示和复现命令不依赖固定环境名。
-
-进入交互模式后可以持续对话：
-
-```text
-finance-agent > /help
-finance-agent > /lang en
-finance-agent > 分析一下 AAPL 最近三个月走势
-finance-agent > /trace off
-finance-agent > /proxy test
-finance-agent > /quote AAPL
-finance-agent > /wechat status
-finance-agent > /memory add 以后港股报告要同时说明展示代码和 Yahoo 查询代码
-finance-agent > /search 智谱 02513 股票
-finance-agent > /fetch https://xueqiu.com/S/02513
-finance-agent > /exit
-```
-
-也支持单次任务：
-
-```bash
-python -m agent.cli "分析一下 AAPL 最近三个月走势，并生成投资研究摘要"
-python -m agent.cli "比较 NVDA 和 AMD 的基本面和技术面"
-python -m agent.cli "用巴菲特、段永平、达利欧三个视角分析 NVDA，并让多智能体辩论是否值得继续跟踪"
-python -m agent.cli "帮我回测 TSLA 的 20 日均线上穿 60 日均线策略"
-python -m agent.cli "生成我的自选股每日简报：AAPL, MSFT, NVDA"
-python -m agent.cli "给 agent 100 万模拟投资 AAPL, MSFT, NVDA, AMD，告诉我买哪些、买多少"
-```
-
-## 常用命令
-
-```text
-/trace on | off              切换执行轨迹：完整展开或动态折叠（默认 off）
-/trace                       展开上一轮任务的详细 thinking 轨迹
-/lang zh | /lang en          切换 CLI 交互语言
-/status                      查看模型、数据源、工具数、thinking 状态和 License
-/compact                     用模型摘要压缩当前交互会话历史，保留最近上下文
-/proxy status/test/set/off   查看、测试、临时设置或关闭网页/行情查询代理
-/wechat status/send/send-md  查看微信连接状态，或发送报告到微信/本地 outbox
-/memory list/add             查看或新增金融研究偏好、纠错和风险规则
-/evolve <复盘/纠错/轨迹>       把金融经验沉淀为 memory 和 Skill
-/predict record/list/eval/learn
-                              记录预测、查看预测账本、事后评分和复盘学习
-/learn-history AAPL 2y 20     从历史数据学习预测规则，记录预测并更新 Skill
-/portfolio init/status/review/mark/sell/trades/pnl/rebalance
-                              创建纸面组合、查看持仓、诊断替换候选、每日估值、模拟卖出、交易流水、每日盈亏、再平衡
-/schedule list/brief/portfolio/run
-                              创建微信定时简报或组合每日估值任务，或执行到期任务
-/skills                      查看可按需加载的项目 Skill
-/mcp                         查看 MCP 服务状态、工具和 prompt 命令
-/security                    查看权限分层和注入防护策略
-/resolve minimax             解析公司名/简称到 A 股、港股、美股候选代码
-/quote AAPL                  查询行情
-/quality AAPL 1y             研究质量门禁和去劣初筛
-/history AAPL 1y             历史价格和指标摘要
-/financials AAPL             基本面摘要
-/news AAPL 5                 新闻
-/indicators AAPL 1y          技术指标
-/report AAPL 1y              研究报告
-/export-report AAPL 3mo reports/aapl.md
-                              生成研究报告并保存为 Markdown 文件
-/compare NVDA AMD 1y         股票对比
-/debate NVDA AMD 1y          多智能体辩论
-/backtest TSLA 20 60 2y      均线策略回测
-/brief AAPL MSFT NVDA        自选股简报
-/search 智谱 02513 股票       搜索公开网页核验标的
-/fetch https://xueqiu.com/S/02513
-                              抓取指定页面摘要
-/tools                       查看工具
-/sources                     查看数据源优先级
-```
-
-交互输入使用 `prompt_toolkit`：支持历史记录、光标移动、Ctrl+A/E/U/K 和模糊 slash command 补全。输入 `/` 或命令前缀时，输入框上方会固定显示最多 8 个匹配命令及说明；用 `↑/↓` 移动、`Tab/Enter` 选中、`Esc` 关闭。补全内容由同一份命令目录驱动，并在运行时合并 Markdown 自定义命令、Skills 和 MCP prompts；底栏持续显示 thinking 模式、模型、可用数据源、Skill 数和 MCP 连接数。CLI 也会自动清理误粘贴的 `finance-agent >` 前缀。
-
-CLI 默认为 `trace off`：执行时只在原地刷新当前状态，完成后折叠成一行摘要。`/trace on` 会像调试日志一样保留每个模型回合、工具调用、参数和结果摘要；任务完成后输入裸 `/trace` 仍可重新展开上一轮详情。这些内容是可审计执行轨迹，不是模型的隐藏推理链。
-
-若模型端点返回 OpenAI-compatible `usage`，摘要还会显示输入/输出/总 token。需要估算费用时，在本地配置 `DEEPSEEK_INPUT_PRICE_PER_MILLION` 与 `DEEPSEEK_OUTPUT_PRICE_PER_MILLION`；项目不硬编码可能变化的模型价格。
-
-## 自定义命令、Skills 与 MCP
-
-可在项目的 `.finance_agent/commands/` 或用户目录的 `~/.finance-agent/commands/` 中放置 Markdown 命令。文件路径会变成 slash command；项目命令会覆盖同名用户命令，但不能覆盖内置命令。模板支持 `$1`、`$2`、`$ARGUMENTS` 和 `$$`：
-
-```markdown
----
-description: 审查一只股票的反证
-argument-hint: <ticker> <period>
----
-请审查 $1 在 $2 内的反证和风险。完整参数：$ARGUMENTS
-```
-
-`/skills` 列出 `skills/*/SKILL.md`；模型可调用只读的 `read_skill` 工具按名加载正文，也可直接输入 `/<skill-name> ...` 使用。MCP server 声明的 prompt 会以 `/mcp:<server>:<prompt>` 出现在同一补全菜单中。
-
-项目根目录的 `.mcp.json` 已连接教学 echo 和领域风险预算 server。领域工具可直接验证：
-
-```bash
-python -m agent.cli /mcp
-python -c "from tools.base import build_default_registry; r=build_default_registry(); print(r.get('mcp__finance__risk_budget').run(capital=100000,risk_pct=1,entry_price=50,stop_price=45)); r.close()"
-```
-
-也可配置更多 stdio server：
-
-```json
-{
-  "mcpServers": {
-    "research": {
-      "command": "python",
-      "args": ["-m", "your_mcp_server"],
-      "cwd": ".",
-      "timeoutSeconds": 10
-    }
-  }
-}
-```
-
-某个 server 启动失败不会隐藏其他正常 server；`/mcp` 会显示每个 server 的状态、错误、工具和 prompt。交互会话或单次任务退出时会关闭所有受管 MCP 子进程。如果项目没有 `.mcp.json`，则保留内置 echo server 作为本地示例。
-
-项目内置的 `mcp.echo_server` / `mcp.finance_server` 只有在命令、模块、空 `env` 和项目根 `cwd` 全部匹配时才会自动启动。其他项目 MCP 默认显示为 blocked，错误详情会给出绑定 `name + command + args + env + cwd + timeout` 的 trust token。审查配置和 server 源码后，只为当前命令临时设置：
-
-```bash
-MINI_OPENCLAW_TRUSTED_MCP_SERVERS='<name>@sha256:<digest>' python -m agent.cli --selfcheck
-```
-
-配置任一字段变化后旧 token 自动失效。这个变量只允许 server 启动；实际调用仍受 `MINI_OPENCLAW_APPROVED_TOOLS` 和权限层约束。
-
-## 代理与语言
-
-如果本机使用 Clash/Mihomo，截图里的混合代理端口是 `7897`，可以在 `.env.local` 中配置：
-
-```bash
-FINANCE_HTTP_PROXY=http://127.0.0.1:7897
-```
-
-也可以在交互模式临时设置：
-
-```text
-/proxy set http://127.0.0.1:7897
-/proxy test
-```
-
-CLI 支持中英文切换：
-
-```bash
-FINANCE_AGENT_LANG=en python -m agent.cli /help
-```
-
-交互模式中也可以输入：
-
-```text
-/lang zh
-/lang en
-```
-
-## 微信连接与自进化
-
-微信连接采用适配器模式：
-
-- 默认 `dry-run`：不会发网络请求，消息写入 `.finance_agent/wechat_outbox/`，方便本地验证。
-- 企业微信/微信群机器人：配置 `FINANCE_WECHAT_WEBHOOK` 后，`/wechat send` 会调用 webhook。
-- 本地 relay：配置 `FINANCE_WECHAT_RELAY_URL` 后，可对接 WeChaty、个人微信桥接器或你自己的消息服务。
-
-```bash
-FINANCE_WECHAT_MODE=dry-run
-FINANCE_PORTFOLIO_DIR=~/.finance-agent/portfolios
-# FINANCE_WECHAT_WEBHOOK=<paste-full-wecom-webhook-url-in-.env.local>
-# FINANCE_WECHAT_RELAY_URL=http://127.0.0.1:8765/wechat/send
-```
-
-常用命令：
-
-```text
-/wechat status
-/wechat send 今天的自选股简报已生成
-/wechat send-md # AAPL 研究摘要
-/memory add 以后回答 SpaceX 先解析 SPCX 并核验行情，不能用旧知识判断未上市
-/memory list
-/evolve SpaceX 查询必须先解析 SPCX，再核验公开网页、行情和新闻来源
-/predict record AAPL up 30 0.65 服务收入和回购支撑
-/predict eval all
-/predict learn save
-/learn-history AAPL 2y 20
-/portfolio init 1000000 AAPL MSFT NVDA AMD GOOGL
-/portfolio review GOOGL AVGO META AMZN TSLA JPM
-/portfolio mark
-/portfolio sell AMD all 波动率过高，模拟止盈/降风险
-/portfolio trades
-/portfolio pnl
-/schedule portfolio default 1440
-/schedule brief AAPL,MSFT,NVDA 1440
-/schedule run
-```
-
-金融自进化会把偏好、纠错、数据源经验和风险规则写入 `.finance_agent/finance_memory.jsonl`。核心 `skills/finance-research-evolution/SKILL.md` 保持稳定；如果确实需要生成新的专用 Skill，可以通过底层 `finance_evolve_from_trace` 指定独立 `skill_name`。本地 memory 目录已被 git 忽略；写入 Skill 前会脱敏常见 key/token/cookie。
-
-预测评分闭环默认把每次方向判断保存到 `~/.finance-agent/predictions.jsonl`，也可用 `FINANCE_PREDICTION_PATH` 指定其他位置；首次使用新默认路径时会迁移旧的 `.finance_agent/predictions.jsonl`。记录包含 baseline 价格、期限、信号证据类型和 thesis。系统使用过去数据生成时间有序、互不重叠的 walk-forward 样本；只有同方向样本至少 30 个时，才输出 Beta 平滑的历史校准命中率、样本数和 95% 区间。样本不足、模型或用户输入的数值只显示为“信号强度，非统计概率”。到期后运行 `/predict eval`，系统使用到期日或之后首个交易日收盘价计算方向命中和实际收益。`/predict eval all` 仅用于 Demo 立即评分未到期预测；`/predict learn` 生成事后复盘。
-
-历史学习预测会把历史 K 线切成 walk-forward 样本，学习当前特征桶在历史上对应的未来收益和胜率。`/learn-history AAPL 2y 20` 会输出方向、启发式信号强度、样本数和匹配特征，把结果写入 `.finance_agent/history_learning.jsonl`，同时更新 `skills/finance-history-learning/SKILL.md` 并记录一条可到期评分的预测。
-
-模拟投资账户默认持久化到 `~/.finance-agent/portfolios/portfolio_default.json`，不受启动目录、新终端或代码 worktree 影响。首次运行会自动迁移旧的 `.finance_agent/portfolio_default.json`；重新初始化前会在 `backups/` 保留时间戳备份。可用 `FINANCE_PORTFOLIO_DIR` 指定其他持久化目录。`/portfolio init 1000000 AAPL MSFT NVDA` 会根据当前行情、基本面、技术面和数据源置信度生成纸面持仓并记录 BUY 交易；评分会拆成动量、质量、风险和数据置信度，弱相对强度会被明确降权。`/portfolio review GOOGL AVGO ...` 会只读诊断当前持仓、弱项和替换候选，不会改仓；`/portfolio mark` 会按最新价格追加一条净值记录；`/portfolio sell AMD all <理由>` 会模拟卖出并记录 SELL、实现盈亏和理由；`/portfolio trades` 查看交易流水；`/portfolio pnl` 按天汇总买入额、卖出额、已实现盈亏、期末净值和当日净值变化；`/portfolio rebalance ...` 会用新的股票池重新计算仓位并记录买卖差额。它只做纸面组合，不会连接真实券商或真实下单。
-
-微信定时推送采用本地文件任务表 `.finance_agent/scheduled_jobs.json`。`/schedule portfolio default 1440` 可以每天给纸面组合估值并推送到微信连接器或 dry-run outbox。创建任务后，需要用 cron、launchd 或手动定期执行：
-
-```bash
-python -m agent.cli /schedule run
-```
-
-## Configuration
-
-没有配置 `DEEPSEEK_API_KEY` 时，系统会使用 `FakeBackend`，由这个离线模型替身在 Agent 循环中选择本地 `finance_route_task`，方便离线演示。配置真模型后，Agent 会使用 OpenAI-compatible chat completions 接口选择工具和组织答案。
-
-配置真模型后，单次命令和交互会话中的自然语言金融问题都进入 ReAct 主循环：模型先拆分任务，再组合行情、历史、基本面、新闻和网页核验工具，最后综合答案。`/report`、`/compare` 等显式 slash command 仍直接生成确定性结果；只有第 1 次模型请求在尚未执行任何工具时失败，金融任务才会明确提示并回退到固定报告，后续模型回合失败不会自动重跑工具。
-
-```bash
 cp .env.example .env.local
+ticker-dossier --selfcheck
+ticker-dossier /help
 ```
 
-可选环境变量：
+安装 A 股、港股和美股的可选数据 Provider：
 
 ```bash
-DEEPSEEK_API_KEY=...
-DEEPSEEK_BASE_URL=https://api.deepseek.com
-DEEPSEEK_MODEL=deepseek-chat
-# GPT-5.6 Sol + xhigh 需要 Responses API：
-# DEEPSEEK_MODEL=gpt-5.6-sol
-# DEEPSEEK_API_MODE=responses
-# DEEPSEEK_REASONING_EFFORT=xhigh
-# FINANCE_MODEL_TIMEOUT_SECONDS=120
-# FINANCE_MODEL_READ_RETRIES=0
-ALPHAVANTAGE_API_KEY=...
-TUSHARE_TOKEN=...
-FINANCE_ALLOW_SAMPLE_FALLBACK=0
-FINANCE_HTTP_PROXY=http://127.0.0.1:7897
-FINANCE_AGENT_LANG=zh
-FINANCE_WECHAT_MODE=dry-run
-# FINANCE_WECHAT_WEBHOOK=...
-# FINANCE_WECHAT_RELAY_URL=...
+python -m pip install -e ".[providers]"
 ```
 
-`.env.local` 已被 `.gitignore` 忽略。不要把 API key、token、cookie 写进代码或文档。
+需要模型驱动的自然语言研究时，在 `.env.local` 中配置 `DEEPSEEK_API_KEY`。项目使用 OpenAI-compatible API；未配置时自动回退到离线后端，不发起付费请求。
 
-## 数据源
+> `ticker-dossier` 是新的主命令；旧的 `finance-agent` 命令保留为兼容别名。
 
-Provider 顺序：
-
-1. Alpha Vantage，需 `ALPHAVANTAGE_API_KEY`
-2. Tushare，需 `TUSHARE_TOKEN`，主要用于 A 股
-3. AKShare，主要用于 A 股公开数据
-4. Yahoo Finance public endpoints
-5. `SAMPLE_FALLBACK`，仅用于离线演示
-
-`SAMPLE_FALLBACK` 会明确标注，不能用于真实投资判断，且默认禁用。仅在离线演示需要样例数据时显式设置：
+## 常见工作流
 
 ```bash
-FINANCE_ALLOW_SAMPLE_FALLBACK=1
+# 行情、基本面、新闻与结构化研究
+ticker-dossier /quote AAPL
+ticker-dossier /financials AAPL
+ticker-dossier /news AAPL 5
+ticker-dossier /report AAPL 1y
+
+# 多标的对比与审查
+ticker-dossier /compare NVDA AMD 1y
+ticker-dossier /debate NVDA AMD 1y
+ticker-dossier /backtest TSLA 20 60 2y
+
+# 只会写入纸面记录，不会真实下单
+ticker-dossier /portfolio init 100000 AAPL MSFT NVDA
+ticker-dossier /portfolio status
+ticker-dossier /predict list
 ```
 
-真实来源会并发查询，每类数据共享一个操作时限，整份快照也有总时限；超时源会被记入失败覆盖并暂时熔断，不会阻塞已成功的备用源。可用 `FINANCE_PROVIDER_TIMEOUT_SECONDS`、`FINANCE_SNAPSHOT_TIMEOUT_SECONDS` 和 `FINANCE_PROVIDER_COOLDOWN_SECONDS` 调整，默认分别为 25、45、60 秒。
+## 安全边界
 
-真实数据结果使用进程内 TTL 缓存，默认行情 60 秒、历史价格 900 秒、基本面 21600 秒、新闻 600 秒。可分别通过 `FINANCE_QUOTE_CACHE_TTL_SECONDS`、`FINANCE_HISTORY_CACHE_TTL_SECONDS`、`FINANCE_FINANCIALS_CACHE_TTL_SECONDS` 和 `FINANCE_NEWS_CACHE_TTL_SECONDS` 调整；设为 `0` 可关闭对应缓存。缓存命中状态和缓存年龄会写入来源覆盖信息。
+| TickerDossier 会做 | TickerDossier 不会做 |
+| --- | --- |
+| 展示来源、时间、数据缺口和相互冲突的证据 | 把缺失字段用模型常识或无来源数字补齐 |
+| 在工作区内执行受限文件与 shell 操作 | 连接券商、提交订单或声称真实成交 |
+| 将网页、新闻、记忆和 MCP 输出视为不可信数据 | 让外部文本覆盖系统策略或权限检查 |
+| 在 `dry-run` 模式写入本地消息 outbox | 未经确认向 webhook / relay 外发内容 |
 
-行情查询所有适用真实源，优先选择更新且实时的结果，并记录最大价差。历史 K 线同样查询全部适用真实源，统一使用未复权收盘价，选择更新/更完整的序列，并报告重叠日期价差。基本面保留优先源已有值，只补空字段，并按字段应用兼容检查：市值等货币字段检查币种，EPS、营收、利润和现金流等期间字段同时检查币种、报告期和期间类型，ROE、杠杆和利润率检查报告期；当前跨源 PE/Forward PE 补值不做这些兼容检查，属于已知边界。由价格和 EPS 推导 PE 时则要求代码、币种一致，EPS 为正，期间为 TTM/年度且报告期不超过 550 天。重叠字段差异只进入来源覆盖，不覆盖优先源已有值。新闻聚合全部适用真实源，做相关性过滤、跨源去重和来源多样化后再截取数量；质量评级只把近 180 天事件算作近期覆盖。AKShare 基本面适配 A 股、港股和美股公开财务指标；样例 fallback 不会被计入真实来源或交叉验证。
+- 文件工具拒绝 `.git`、`.env`、凭据目录、越界路径和疑似 secret 写入。
+- shell 只接受受限单命令；危险 Git、控制符、管道和重定向会被拒绝或要求确认。
+- 非内置 MCP server 必须通过绑定完整配置的信任指纹；子进程只继承最小环境。
+- 这是应用层防护，不是完整操作系统沙箱。没有 `bubblewrap` 时，获批子进程仍拥有当前用户权限。
 
-Yahoo 新闻会先扩大候选集，再用 ticker、查询代码和公司名中的特异词过滤，会丢弃 `technology`、`group`、`inc` 这类通用词造成的错配。无强相关结果时会明确说明“暂无/被过滤”；接口异常则单独说明失败原因。
+完整威胁边界见 [架构文档](docs/ARCHITECTURE.md#安全边界)。
 
-港股代码会区分展示代码和数据源查询代码。例如公开页面常显示 `智谱(02513)`，Yahoo Finance 查询使用 `2513.HK`；MiniMax 常见展示代码 `00100.HK`，Yahoo 查询使用 `0100.HK`。报告里会保留展示代码并说明查询代码。
+## 架构
 
-美股新上市或刚改名标的必须先做公开网页核验，再查行情。例如 `SpaceX` 会解析为 `SPCX`，可用：
-
-```bash
-python -m agent.cli /resolve SpaceX
-python -m agent.cli /search "SpaceX SPCX Nasdaq IPO"
-python -m agent.cli /quote SPCX
-python -m agent.cli "SpaceX 最近情况如何"
+```mermaid
+flowchart LR
+    U["Terminal<br/>interactive · one-shot · slash commands"] --> C["CLI<br/>UI · command routing"]
+    C --> B["bootstrap.py<br/>composition root"]
+    B --> A["Runtime<br/>agent loop · context · permissions"]
+    B --> L["LLM adapters<br/>DeepSeek-compatible · FakeBackend"]
+    B --> T["Tool registry"]
+    A --> L
+    A --> T
+    T --> R["Research<br/>data · analysis · paper portfolio"]
+    T --> I["Integrations<br/>HTTP · MCP · WeChat · scheduler"]
+    R --> I
+    I --> E["External providers / services"]
+    R --> S[("Local state")]
 ```
 
-## English Quick Start
-
-```bash
-pip install -r requirements.txt
-cp .env.example .env.local
-FINANCE_AGENT_LANG=en python -m agent.cli --selfcheck
-FINANCE_AGENT_LANG=en python -m agent.cli /help
-FINANCE_AGENT_LANG=en python -m agent.cli "Analyze recent SpaceX / SPCX developments"
-```
-
-Optional proxy for Clash/Mihomo:
-
-```bash
-FINANCE_HTTP_PROXY=http://127.0.0.1:7897
-```
-
-Useful commands:
+`bootstrap.py` 是唯一组装点；`runtime` 不反向导入具体金融实现，领域逻辑位于 `research`，外部 I/O 位于 `integrations`，模型可见能力通过 `tools` 适配到统一契约。
 
 ```text
-/lang en
-/proxy test
-/wechat status
-/predict record SPCX down 30 0.55 valuation reset risk
-/predict learn save
-/schedule brief AAPL,MSFT,NVDA 1440
-/schedule run
-/resolve SpaceX
-/quote SPCX
-/report AAPL 1y
-/quality AAPL 1y
+src/ticker_dossier/
+├── cli/             # 入口、交互 UI 与命令路由
+├── runtime/         # Agent 循环、上下文、权限与工具契约
+├── llm/             # 真实模型和离线模型适配器
+├── research/        # 数据、分析、回测、预测与纸面组合
+├── tools/           # Tool 适配器
+├── integrations/    # HTTP、MCP、微信与调度
+├── skills/          # Skill 加载和生成逻辑
+└── bootstrap.py     # composition root
 ```
 
-## 边界
+设计约束、状态边界、已知技术债和下一步拆分路线见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
-- 本项目只做研究辅助，不做自动交易。
-- 输出必须区分事实、推断、风险和数据缺口。
-- 研究报告会包含质量门禁，但通过门禁不代表可以买入，只表示数据更适合继续研究。
-- 本地工具有安全层：越界路径、敏感文件、危险命令、疑似密钥写入会被拦截。
-- 回测不包含滑点、手续费、税费、分红复权和真实成交约束。
-- 免费数据源可能延迟、限流或缺失字段。
-- 网页抓取遇到 WAF/JS challenge 时只会标注限制，不会假装读取完整正文。
-- 重复说“这只股会涨”、要求忽略风险或声称有内幕都不算新证据，不会因此提高置信度。
-- 首轮模型失败后生成的确定性金融兜底报告会记入同一交互会话，后续“它呢”类问题仍有上下文。压缩后的历史只作为低信任数据，不会被提升成 system 指令。
-- `MINI_OPENCLAW_AUTO_APPROVE=1` 只用于自动批准已经审查过的本地 Python 执行入口，包括工作区 `.py` 脚本以及白名单内的 `pytest` / `compileall` 模块。工作区内的 `write/edit` 和非脚本白名单命令按权限表直接处理，不需要这个开关；`web_fetch`、外部 MCP 和真实微信发送不会因该变量而执行。开关不会关闭工作区、敏感路径、secret 写入和 Shell 白名单等执行前检查，但获批的 Python 代码本身仍具有本机进程权限，因此只能在审查代码后临时开启。
-- 对确实需要单独批准的工具，使用逗号分隔的 `MINI_OPENCLAW_APPROVED_TOOLS`，例如 `MINI_OPENCLAW_APPROVED_TOOLS=mcp__echo__echo`。它只批准列出的工具，不能越过硬拒绝规则；常规演示不设置这两个变量。
+<details>
+<summary><strong>常用命令</strong></summary>
+
+| 命令 | 用途 |
+| --- | --- |
+| `/help`、`/status`、`/selfcheck` | 帮助、运行状态与环境自检 |
+| `/resolve Apple`、`/quote AAPL` | 解析证券并查询行情快照 |
+| `/history AAPL 1y`、`/indicators AAPL 1y` | 历史行情与技术指标 |
+| `/financials AAPL`、`/news AAPL 5` | 基本面与相关新闻 |
+| `/quality AAPL 1y`、`/report AAPL 1y` | 质量门禁与研究档案 |
+| `/compare NVDA AMD 1y`、`/debate NVDA AMD 1y` | 同口径对比与多视角审查 |
+| `/portfolio status`、`/predict list` | 纸面组合与预测账本 |
+| `/skills`、`/mcp`、`/tools` | 扩展能力与工具诊断 |
+| `/trace on\|off`、`/trace` | 执行轨迹控制与回看 |
+| `/schedule list`、`/wechat status` | 本地任务与消息连接状态 |
+
+命令目录同时驱动帮助和模糊补全；项目命令、Skills 与 MCP prompts 会在运行时合并进入菜单。
+
+</details>
+
+<details>
+<summary><strong>配置与本地状态</strong></summary>
+
+配置按“现有环境变量 → `.env.local` → `.env`”读取，真实密钥只应放在 Git 忽略的本地文件中。
+
+| 变量 | 作用 |
+| --- | --- |
+| `DEEPSEEK_API_KEY` | 启用真实模型后端 |
+| `DEEPSEEK_BASE_URL`、`DEEPSEEK_MODEL` | 模型端点和模型名 |
+| `TICKER_DOSSIER_LANG` | CLI 语言：`zh` 或 `en` |
+| `FINANCE_HTTP_PROXY` | 网页与行情请求代理 |
+| `TUSHARE_TOKEN`、`ALPHAVANTAGE_API_KEY` | 启用对应数据源 |
+| `FINANCE_ALLOW_SAMPLE_FALLBACK` | 显式允许样例数据回退，默认关闭 |
+| `FINANCE_PREDICTION_PATH`、`FINANCE_PORTFOLIO_DIR` | 覆盖预测与纸面组合路径 |
+| `FINANCE_WECHAT_MODE` | `dry-run`、`webhook` 或 `relay` |
+| `TICKER_DOSSIER_APPROVED_TOOLS` | 按名称批准确认类工具 |
+| `TICKER_DOSSIER_AUTO_APPROVE` | 仅自动批准受限的本地 Python 入口 |
+| `TICKER_DOSSIER_TRUSTED_MCP_SERVERS` | 信任已审查 MCP 配置的指纹 |
+
+为避免升级时丢失用户数据，现有 `.finance_agent/`、`~/.finance-agent/`、`FINANCE_AGENT_LANG` 和 `MINI_OPENCLAW_*` 位置/变量继续兼容。完整示例见 [.env.example](.env.example)。
+
+</details>
+
+## 开发
+
+```bash
+python -m pip install -e ".[dev,providers]"
+python -m pytest -q
+python -m compileall -q src/ticker_dossier evals
+python -m ticker_dossier --selfcheck
+```
+
+评估工具位于 `evals/`，测试位于 `tests/`，可版本化项目 Skills 位于 `skills/`。提交前请确认没有加入 `.env.local`、`.finance_agent/`、个人状态或生成目录。
 
 ## License
 
-MIT，见 [LICENSE](LICENSE)。
-
-## 开发验证
-
-```bash
-python -m compileall agent backend eval finance mcp skills tools trace2skill wechat scheduler tests
-python -m agent.cli --selfcheck
-python -m pytest
-
-# 5 股真实源测试；禁用样例 fallback，避免“假通过”
-FINANCE_ALLOW_SAMPLE_FALLBACK=0 python -m agent.cli /compare AAPL 600519.SS 0700.HK 02513.HK SPCX 1y
-
-# 三轮连续看涨/内幕诱导测试；需要已配置 DEEPSEEK_API_KEY，会调用模型 3 次
-FINANCE_RUN_LIVE_EVAL=1 python -m pytest tests/test_live_injection_eval.py -q
-```
-
-常规 `pytest` 会跳过需花费模型额度的真实诱导测试；只有显式设置 `FINANCE_RUN_LIVE_EVAL=1` 才会执行。测试数量会随提交变化，复现时以 `python -m pytest -q` 最后一行的实时汇总为准，文档不硬编码通过数。
-
-Demo Day 请只使用 [docs/DEMO_DAY_SCRIPT.md](docs/DEMO_DAY_SCRIPT.md)，其中包含逐分钟讲稿、现场命令、预期结果、答辩标准答案和失败预案。正式交付见 sibling 报告仓库中的 [技术报告](../ppt-and-report/reports/technical_report.pdf) 和 [消融报告](../ppt-and-report/reports/ablation_report.pdf)；仓库内的 [技术设计](docs/TECHNICAL_DESIGN.md) 与 [早期消融说明](docs/ABLATION_REPORT.md) 仅作实现补充。
-
-项目进度和历史决策见 [FINANCE_AGENT_PROGRESS.md](FINANCE_AGENT_PROGRESS.md)。
+[MIT](LICENSE)

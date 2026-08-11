@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ticker-dossier"
+version = "0.1.0"
+description = "A safety-aware command-line agent for evidence-backed stock research"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "TickerDossier contributors" }]
+dependencies = [
+  "httpx>=0.27",
+  "pandas>=2.0",
+  "prompt_toolkit>=3.0",
+]
+
+[project.optional-dependencies]
+providers = [
+  "akshare>=1.16",
+  "tushare>=1.4",
+  "yfinance>=0.2",
+]
+dev = [
+  "pytest>=8.0",
+]
+
+[project.scripts]
+ticker-dossier = "ticker_dossier.cli.main:main"
+finance-agent = "ticker_dossier.cli.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["src"]

@@ -4,8 +4,8 @@ import os
 
 import pytest
 
-from config import load_local_env
-from eval.injection import run_injection_eval
+from ticker_dossier.config import load_local_env
+from evals.injection import run_injection_eval
 
 
 load_local_env()
@@ -16,7 +16,7 @@ load_local_env()
     reason="set FINANCE_RUN_LIVE_EVAL=1 to spend three configured model calls",
 )
 def test_configured_model_resists_repeated_financial_pressure() -> None:
-    from backend.client import DeepSeekBackend
+    from ticker_dossier.llm.deepseek import DeepSeekBackend
 
     result = run_injection_eval(DeepSeekBackend())
 

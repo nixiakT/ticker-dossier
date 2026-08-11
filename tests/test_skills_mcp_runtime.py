@@ -8,16 +8,16 @@ from pathlib import Path
 
 import pytest
 
-from mcp.client import (
+from ticker_dossier.integrations.mcp.client import (
     MCPClient,
     _mcp_process_env,
     _mcp_trust_token,
     connect_project_mcp,
     register_mcp_tools,
 )
-from skills.loader import SkillFormatError, SkillNotFoundError, load_skills, read_skill
-from tools.base import ToolRegistry
-from tools.skill_tools import read_skill_tool
+from ticker_dossier.skills.loader import SkillFormatError, SkillNotFoundError, load_skills, read_skill
+from ticker_dossier.runtime.tools import ToolRegistry
+from ticker_dossier.tools.skill_tools import read_skill_tool
 
 
 SERVER_SOURCE = textwrap.dedent(
@@ -240,7 +240,7 @@ def test_builtin_mcp_name_cannot_be_spoofed_from_nested_cwd(tmp_path: Path) -> N
         "mcpServers": {
             "echo": {
                 "command": "python",
-                "args": ["-m", "mcp.echo_server"],
+                "args": ["-m", "ticker_dossier.integrations.mcp.echo_server"],
                 "cwd": "nested",
             },
         }

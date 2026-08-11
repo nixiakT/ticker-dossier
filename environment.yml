@@ -1,4 +1,4 @@
-name: openclaw
+name: ticker-dossier
 channels:
   - conda-forge
 dependencies:
