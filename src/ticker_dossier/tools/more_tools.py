@@ -52,7 +52,7 @@ def _grep(pattern: str, path: str = ".") -> str:
         return "未找到匹配。"
     if result.returncode != 0:
         return f"grep 失败: {result.stderr.strip()}"
-    return _truncate(result.stdout)
+    return _truncate(_workspace_relative_grep_output(result.stdout))
 
 
 # --- glob：按文件名模式找文件 ---
@@ -181,6 +181,20 @@ def _grep_python(pattern: str, path: Path) -> str:
                 if len(rows) >= 200:
                     return "\n".join(rows)
     return "\n".join(rows) if rows else "未找到匹配。"
+
+
+def _workspace_relative_grep_output(text: str) -> str:
+    """Normalize ripgrep paths across platforms and rg versions."""
+    root = str(WORKSPACE_ROOT)
+    prefixes = (root + "/", root + "\\")
+    rows: list[str] = []
+    for line in text.splitlines():
+        for prefix in prefixes:
+            if line.startswith(prefix):
+                line = line[len(prefix):]
+                break
+        rows.append(line)
+    return "\n".join(rows) + ("\n" if text.endswith("\n") else "")
 
 
 def _task_store() -> Path:

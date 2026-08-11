@@ -630,7 +630,7 @@ def test_local_tools_work_and_enforce_safety() -> None:
         assert "   2 world" in segment
         assert "第 2 行起，返回 1 行" in segment
         assert target.name in glob_tool.run(pattern="*.txt")
-        assert f"{target}:1:hello" in grep_tool.run(pattern="hello", path=str(target))
+        assert f"{target.name}:1:hello" in grep_tool.run(pattern="hello", path=str(target))
         assert "编辑成功" in edit_tool.run(path=str(target), old="world", new="agent")
         assert target.read_text(encoding="utf-8") == "hello\nagent\n"
     finally:
