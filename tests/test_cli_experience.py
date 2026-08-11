@@ -5,7 +5,15 @@ import io
 
 import pytest
 
-from ticker_dossier.cli.command_catalog import CompletionItem, command_completions, command_specs, completion_meta
+from ticker_dossier.cli.command_catalog import (
+    CompletionItem,
+    command_completions,
+    command_names,
+    command_specs,
+    completion_meta,
+    resolve_command,
+)
+from ticker_dossier.cli.commands import CommandRouter
 from ticker_dossier.cli.custom_commands import load_custom_commands
 from ticker_dossier.cli.dynamic_commands import DynamicSlashCommands
 from ticker_dossier.cli.input import (
@@ -18,6 +26,7 @@ from ticker_dossier.cli.input import (
     clean_user_input,
 )
 from ticker_dossier.cli.ui import _display_width, render_help, render_status_bar, render_tool_card, render_welcome
+from ticker_dossier.runtime.tools import ToolRegistry
 
 
 def test_command_catalog_drives_missing_completions() -> None:
@@ -30,6 +39,23 @@ def test_command_catalog_drives_missing_completions() -> None:
     assert "/think compact" not in completions
     assert "/skills" in completions
     assert len({spec.name for spec in command_specs()}) == len(command_specs())
+
+
+def test_command_catalog_is_the_complete_router_and_alias_index() -> None:
+    router = CommandRouter(ToolRegistry())
+    specs = command_specs()
+
+    assert {spec.handler_key for spec in specs} == set(router.handler_keys())
+    assert len(command_names()) == sum(1 + len(spec.aliases) for spec in specs)
+    for spec in specs:
+        assert resolve_command(f"/{spec.name}") is spec
+        assert resolve_command(spec.name.upper()) is spec
+        for alias in spec.aliases:
+            assert resolve_command(f"/{alias}") is spec
+    assert resolve_command("/missing") is None
+    assert router.handle("/quit").exit is True
+    assert "/quit" in command_completions()
+    assert "/learn" in command_completions()
 
 
 def test_input_cleaner_accepts_new_and_legacy_prompt_prefixes() -> None:

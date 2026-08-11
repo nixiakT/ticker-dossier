@@ -24,13 +24,26 @@ ticker-dossier/
 │   ├── security.py
 │   ├── telemetry.py
 │   ├── cli/
+│   │   └── handlers/
 │   ├── runtime/
+│   │   ├── execution.py
+│   │   └── protocols.py
 │   ├── llm/
 │   ├── research/
+│   │   └── portfolio/
 │   ├── tools/
 │   ├── integrations/
+│   │   ├── market_data/
+│   │   │   └── providers/
 │   │   └── mcp/
+│   │       ├── config.py
+│   │       ├── transport.py
+│   │       └── runtime.py
+│   ├── resources/
+│   │   ├── default.mcp.json
+│   │   └── skills/
 │   └── skills/
+├── .github/workflows/ci.yml
 ├── skills/
 ├── tests/
 ├── evals/
@@ -47,18 +60,26 @@ ticker-dossier/
 | 路径 | 责任 | 不应承担 |
 | --- | --- | --- |
 | `src/ticker_dossier/__main__.py` | 把模块运行转交给 CLI | 组装业务对象或实现命令 |
-| `src/ticker_dossier/bootstrap.py` | 创建后端、工具注册表和 `AgentLoop` | CLI 绘制、金融计算或状态渲染 |
+| `src/ticker_dossier/bootstrap.py` | 创建 `ResearchServices`、后端、工具注册表和 `AgentLoop` | CLI 绘制、金融计算或状态渲染 |
 | `src/ticker_dossier/config.py` | 从本地环境文件补充环境变量 | 保存真实凭据或业务默认对象 |
 | `src/ticker_dossier/security.py` | 路径、shell、出站文本和不可信内容检查 | 命令路由或领域判断 |
 | `src/ticker_dossier/telemetry.py` | token usage 归一化、累计与可选成本估算 | 调用模型或负责终端展示 |
-| `src/ticker_dossier/runtime/` | Agent 循环、会话、上下文、权限决策、提示策略、工具契约 | 导入具体金融能力或具体外部服务 |
+| `src/ticker_dossier/runtime/loop.py` | 模型轮次、收敛、会话与最终任务边界 | 直接执行工具或选择具体适配器 |
+| `src/ticker_dossier/runtime/execution.py` | 工具权限、复用缓存、回执、observation 与副作用边界 | 模型调用或领域计算 |
+| `src/ticker_dossier/runtime/protocols.py`、`tools.py` | `ModelBackend`、`Tool` 与 `ToolRegistry` 稳定契约 | 导入具体后端、金融或集成实现 |
 | `src/ticker_dossier/llm/` | 真实模型与离线模型适配器 | 注册工具或决定 CLI 行为 |
-| `src/ticker_dossier/research/` | 金融数据模型、分析、质量门禁、回测、预测与纸面组合 | 终端交互和通用工具协议 |
+| `src/ticker_dossier/research/` | Provider 选择/合并、金融模型、分析、质量门禁、回测和预测 | 终端交互和通用工具协议 |
+| `src/ticker_dossier/research/portfolio/` | 纸面组合模型、评分和纯渲染 | 文件位置选择和外部行情抓取 |
+| `src/ticker_dossier/research/paper_portfolio.py` | 兼容 facade、账户存储、迁移与显式写操作 | 实时行情 Provider 实现 |
 | `src/ticker_dossier/research/rendering.py` | 把领域结果渲染为面向用户的研究文本 | 访问终端、创建模型或持久化会话 |
 | `src/ticker_dossier/tools/` | 把领域、文件、网页、消息等能力适配为 `Tool` | 重复实现领域算法 |
-| `src/ticker_dossier/integrations/` | HTTP、MCP、消息与调度等 I/O 边界 | Agent 循环和 CLI 状态机 |
+| `src/ticker_dossier/integrations/market_data/` | Provider contract、字段归一化与各数据源适配器 | 多源合并策略或 CLI 渲染 |
+| `src/ticker_dossier/integrations/mcp/` | MCP 配置/信任、stdio 传输、发现/注册和生命周期 | Agent 收敛或领域策略 |
+| `src/ticker_dossier/integrations/` | HTTP、消息与调度等其余 I/O 边界 | Agent 循环和 CLI 状态机 |
+| `src/ticker_dossier/cli/handlers/` | session、research、portfolio、integrations、workflow 命令处理 | 维护第二份命令目录或实现领域算法 |
 | `src/ticker_dossier/skills/` | 加载、校验和生成 Skill | 存放具体项目 Skill 内容 |
-| `skills/` | 可审查、可版本化的项目 Skill | 临时会话状态或密钥 |
+| `src/ticker_dossier/resources/` | wheel 内置的只读 Skills 与 MCP 默认配置 | 保存用户编辑或运行状态 |
+| `skills/` | 可审查、可版本化的项目 Skill overlay | 临时会话状态或密钥 |
 | `tests/` | 单元、集成和回归测试 | 生产时导入的实现 |
 | `evals/` | 评估任务、指标、trace 和安全评估 | 运行时依赖 |
 
@@ -69,10 +90,11 @@ ticker-dossier/
 ```text
 ticker_dossier.cli ───────────────┐
 ticker_dossier.bootstrap ─────────┼──> llm / tools / integrations / research / skills
-ticker_dossier.tools ─────────────┴──> runtime contracts
-ticker_dossier.integrations.mcp ─────> runtime Tool + ToolRegistry
+ticker_dossier.tools ─────────────┴──> runtime contracts + injected application services
+ticker_dossier.integrations.mcp.runtime ─> runtime Tool + ToolRegistry
+ticker_dossier.integrations.market_data ─> research models/symbols + integrations.http
 ticker_dossier.llm ──────────────────> config + integrations.http + telemetry
-ticker_dossier.research ─────────────> config + security + integrations.http
+ticker_dossier.research ─────────────> config + security + focused integrations
 ticker_dossier.runtime ──────────────> security
 ```
 
@@ -80,16 +102,17 @@ ticker_dossier.runtime ──────────────> security
 
 1. `ticker_dossier.runtime` 不导入 `ticker_dossier.cli`、`ticker_dossier.research`、`ticker_dossier.tools`、`ticker_dossier.integrations` 或 `ticker_dossier.llm`。
 2. `ticker_dossier.research` 不导入 CLI 或工具适配器；领域对象可脱离终端和工具注册表测试。
-3. `ticker_dossier.tools` 可以依赖运行时契约和具体能力，但其他层不应依赖具体工具模块来复用业务逻辑。
-4. `ticker_dossier.llm` 和 `ticker_dossier.integrations` 是外部适配器；核心运行时只接收它们提供的对象，不反向选择实现。
-5. 具体实现的批量导入和生命周期管理集中在 `ticker_dossier.bootstrap`。
-6. CLI 可以协调应用服务，但新的领域规则必须先进入 `research`，不能只存在于命令 handler。
-7. `tests` 与 `evals` 只能通过 `ticker_dossier.*` 导入生产代码。
+3. `ticker_dossier.tools` 可以依赖运行时契约和注入的具体能力，但其他层不应依赖 Tool 适配器来复用业务逻辑。
+4. `integrations.market_data` 可使用领域值对象表达结果；多源优先级、合并和覆盖诊断仍由 `research.data.ProviderChain` 决定。
+5. `ticker_dossier.llm` 和其他 `integrations` 是外部适配器；核心运行时只接收它们提供的对象，不反向选择实现。
+6. 具体实现的批量导入、共享服务创建和生命周期管理集中在 `ticker_dossier.bootstrap` 与 `ToolRegistry`。
+7. CLI handler 可以协调应用服务，但新的领域规则必须先进入 `research`；`command_catalog` 是名称、帮助、补全和 `handler_key` 的单一来源。
+8. `tests` 与 `evals` 只能通过 `ticker_dossier.*` 导入生产代码。
 
-当前有两个需要继续收敛的例外：
+当前保留两个兼容性例外：
 
-- `research/data.py`、`research/resolver.py` 和 `research/web.py` 仍直接使用共享 HTTP 集成。后续拆分 Provider 适配器时，纯选择与合并规则应留在领域层，网络实现移到集成层。
-- `research/debate_orchestrator.py` 在缺少注入后端时会延迟创建具体模型适配器。后续应由组装点注入模型工厂，使领域编排不选择基础设施。
+- `research/data.py` 为保持原有 import 与默认构造行为，会重导出 `integrations.market_data` contract/Provider，并在默认 `ProviderChain` 中选择具体适配器；网络实现本身已经不在领域模块中。
+- `research/debate_orchestrator.py` 在缺少注入后端时仍会延迟创建具体模型适配器，因此领域编排尚未完全摆脱基础设施选择。
 
 这些例外是已知技术债，不应成为新增依赖的先例。
 
@@ -97,12 +120,15 @@ ticker_dossier.runtime ──────────────> security
 
 `src/ticker_dossier/bootstrap.py` 是核心应用的 composition root。它有意成为少数“知道所有具体实现”的模块。
 
+`build_research_services()` 创建应用级 `ResearchServices`。当前它持有唯一的 `FinanceResearchAgent`；该 facade 及其 `ProviderChain` 会被 CLI、金融 Tool、演化 Tool 和调度 Tool 共同复用，避免一次进程内出现相互独立的研究服务和缓存。
+
 `build_default_registry()` 执行以下工作：
 
-1. 创建空的 `ToolRegistry`。
-2. 导入并注册文件、shell、记忆、Skill、金融、网页、调度和消息工具。
-3. 读取项目 MCP 配置，把已连接工具注册为 `mcp__<server>__<tool>`。
-4. 把注册表及其受管子进程生命周期交给调用方。
+1. 接受调用方提供的 `ResearchServices`，或创建默认服务。
+2. 创建 `ToolRegistry`，通过 `provide_service("research", services)` 发布应用服务。
+3. 把同一个 finance facade 绑定到金融、演化和调度 Tool factory，再注册文件、shell、记忆、Skill、网页和消息工具。
+4. 读取项目或 wheel 内置的 MCP 配置，把已连接工具注册为 `mcp__<server>__<tool>`。
+5. 由注册表同时持有服务引用和 `MCPRuntime` 等受管资源，交给调用方统一关闭。
 
 `build_agent()` 执行以下工作：
 
@@ -112,7 +138,7 @@ ticker_dossier.runtime ──────────────> security
 4. 从领域层注入证券提取与规范化回调，避免运行时反向导入金融代码。
 5. 将后端、注册表、系统提示、observer、权限与回调交给 `AgentLoop`。
 
-CLI 的提示词构建、终端 observer、输入组件和确定性命令路由属于界面生命周期，保留在 `ticker_dossier.cli.main`。跨 CLI、服务或未来入口都需要的具体实现选择，应移入 `bootstrap.py`，而不是复制一套注册逻辑。
+CLI 的提示词构建、终端 observer、输入组件和确定性命令路由属于界面生命周期，保留在 `ticker_dossier.cli.main`。`CommandRouter` 优先从注册表取得同一个 `ResearchServices.finance`；仅为旧测试/显式注入保留兼容 fallback。跨 CLI、服务或未来入口都需要的具体实现选择，应进入 `bootstrap.py`，而不是复制一套注册逻辑。
 
 可以直接复用组装 API：
 
@@ -142,28 +168,64 @@ python -m ticker_dossier
 CLI 内部有三条可观察路径：
 
 ```text
-自然语言任务 ─> AgentSession ─> AgentLoop ─> ToolRegistry ─> Tool adapters
-动态命令   ───> 展开为 user-level prompt ────────────────────┘
-内置命令   ───> CommandRouter ─> deterministic research/integration calls
+自然语言任务 ─> AgentSession ─> AgentLoop ─> ToolExecutor ─> ToolRegistry ─> Tool adapters
+动态命令   ───> 展开为 user-level prompt ─────────────────────────────────────┘
+内置命令   ───> command catalog ─> handler registry ─> research/integration services
 ```
 
-- 自然语言任务进入多轮 Agent 循环。模型返回工具调用，运行时检查权限、执行工具，并把 observation 回填上下文。
+- 自然语言任务进入多轮 Agent 循环。模型返回工具调用，`ToolExecutor` 依次处理公开范围、重复调用缓存、交易/持久状态/微信边界、权限、执行回执和不可信 observation 包装，再按原事件顺序回填上下文。
 - Markdown 命令、项目 Skill 和 MCP prompt 先展开为普通用户内容，再走同一 Agent 路径；它们不获得 system 权限。
-- 内置 slash command 由 `CommandRouter` 直接调用确定性能力，适合诊断和可重复操作。
+- 内置 slash command 由 `command_catalog.CommandSpec.handler_key` 定位 handler；`HANDLER_METHODS` 必须与 catalog 完全对应，`CommandRouter` 启动时会拒绝缺失或孤立 handler。
+- handler 按 session、research、portfolio、integrations 和 workflow 分组，直接调用确定性能力，适合诊断和可重复操作；帮助和补全仍读取同一 catalog。
 - 只有第一次模型请求在任何工具执行前失败时，金融任务才允许使用确定性兜底；后续失败不自动重放，避免重复副作用。
 
 ## 运行时契约
 
-`ticker_dossier.runtime.tools.Tool` 用名称、说明、JSON 参数 schema 和执行函数表达一个能力。`ToolRegistry` 负责唯一注册、schema 导出、查找、MCP 状态和资源关闭。
+`ticker_dossier.runtime.protocols.ModelBackend` 定义模型最小结构契约。`runtime.tools.Tool` 用名称、说明、JSON 参数 schema 和执行函数表达一个能力；`ToolRegistry` 负责唯一注册、schema 导出、按名查找、应用服务、MCP 状态和受管资源关闭。
 
 `AgentLoop` 只依赖以下抽象行为：
 
 - 后端提供 `chat(messages, tools)` 并返回文本、工具调用和可选 usage。
 - 注册表提供 schema、按名称查找和生命周期方法。
 - observer 接收结构化事件，用于 CLI trace，而不是参与业务决策。
-- 权限层对每次工具调用返回 allow、confirm 或 deny。
+- `ToolExecutor.execute()` 对每次工具调用返回 `ExecutionResult`，其中包含原始输出、模型 observation、成功状态、进度状态、回执和 tool message。
+- 权限层对每次工具调用返回 allow、confirm 或 deny；相同名称与参数只执行一次，后续调用复用已包装结果并发出 `tool_reused`。
 
-工具失败会成为可审计 observation，由模型决定是否修复；结果过长会截断，较早会话按预算压缩。压缩内容、工具输出、网页、MCP 和持久记忆都保留低信任标记，不能覆盖系统策略。
+真实交易伪装成纸面写入、无显式意图的持久状态写入、未经 `wechat_status` 的消息发送都会在执行器内拒绝。工具失败会成为可审计 observation，由模型决定是否修复；结果过长会截断，较早会话按预算压缩。压缩内容、工具输出、网页、MCP 和持久记忆都保留低信任标记，不能覆盖系统策略。
+
+## 市场数据边界
+
+市场数据已分成“外部适配”与“领域选择”两个接缝：
+
+```text
+research.data.ProviderChain
+├── 并发调用、超时/熔断、TTL 缓存
+├── 多源选择、字段合并、交叉验证与覆盖诊断
+└── integrations.market_data
+    ├── base.py                 # Protocol + provider errors
+    ├── _normalization.py       # 外部字段解析与归一化
+    └── providers/
+        ├── yahoo.py
+        ├── akshare.py
+        ├── tushare.py
+        ├── alpha_vantage.py
+        └── sample.py
+```
+
+具体 Provider/HTTP 逻辑只位于 `integrations.market_data`。`research.data` 保留 `ProviderChain`、合并策略和旧 Provider 名称的 identity re-export，因此已有 `from ticker_dossier.research.data import YahooFinanceProvider` 不会立即失效。Provider contract、能力筛选、缓存深拷贝和熔断均有 characterization tests。
+
+## MCP 边界
+
+MCP 按职责拆成四层：
+
+| 模块 | 责任 |
+| --- | --- |
+| `integrations.mcp.config` | 读取项目/内置配置，校验 server，计算完整配置信任指纹，构造最小子进程环境 |
+| `integrations.mcp.transport` | 单个 stdio 子进程、行分隔 JSON-RPC、超时、stderr 诊断和关闭 |
+| `integrations.mcp.runtime` | client 生命周期、tool/prompt 发现、schema 清洗、命名冲突检查和注册 |
+| `integrations.mcp.client` | 对旧公开与测试 import 的兼容 facade；不再承载实现 |
+
+`MCPRuntime` 先交给 `ToolRegistry.manage()`，即使配置或发现中途失败也能在退出路径统一关闭。没有项目 `.mcp.json` 时，安装包使用 `resources/default.mcp.json`；项目文件存在时明确覆盖内置模板。外部 server 仍需与 `name + command + args + env + cwd + timeout` 绑定的信任 token。
 
 ## 状态与生成物边界
 
@@ -171,7 +233,8 @@ CLI 内部有三条可观察路径：
 
 - `src/ticker_dossier/`：生产源码。
 - `tests/` 与 `evals/`：验证资产。
-- `skills/`：项目 Skill 源文件，修改后必须像代码一样审查。
+- `src/ticker_dossier/resources/`：随 wheel 发布的只读 Skill 与 MCP 默认配置。
+- `skills/`：项目 Skill overlay，修改后必须像代码一样审查。
 - `docs/`、`pyproject.toml`、`.env.example` 和 `.mcp.json`：文档与无密钥配置。
 
 `.mcp.json` 可以声明显式环境，但仓库版本不应包含 secret。需要敏感值的外部 server 应通过本地配置或受控启动环境提供。
@@ -184,7 +247,7 @@ CLI 内部有三条可观察路径：
 - `finance_memory.jsonl` 与 `history_learning.jsonl`；
 - `scheduled_jobs.json` 与 `wechat_outbox/`；
 - `commands/` 中的项目本地动态命令；
-- 旧位置首次迁移时读取的预测或纸面组合文件。
+- 兼容读取的旧 workspace 纸面组合文件。
 
 `.agent_task_list` 是工作区内的临时规划状态，也不属于源码。
 
@@ -200,6 +263,27 @@ CLI 内部有三条可观察路径：
 品牌迁移后优先使用 `TICKER_DOSSIER_LANG`、`TICKER_DOSSIER_APPROVED_TOOLS`、
 `TICKER_DOSSIER_AUTO_APPROVE` 和 `TICKER_DOSSIER_TRUSTED_MCP_SERVERS`。
 旧的 `FINANCE_AGENT_LANG` 与 `MINI_OPENCLAW_*` 变量继续作为兼容回退，现有状态目录也不自动改名，以免静默丢失用户数据。
+
+### 纸面组合位置与迁移
+
+纸面账户 schema 当前为 v2，持久化 `schema_version`、稳定 `account_id` 和 `origin`。默认写入 `~/.finance-agent/portfolios/portfolio_<name>.json`，同时兼容检查 workspace 的 `.finance_agent/portfolio_<name>.json`，但绝不自动复制、覆盖或合并。
+
+状态规则如下：
+
+1. `/portfolio locate [name]` 只检查两个位置，不创建或修改文件。
+2. 只有 workspace 文件存在时，读取会继续使用它并显示迁移提示。
+3. `/portfolio migrate [name]` 是显式的 workspace → 用户级迁移；目标已存在即拒绝。源文件先移动到带时间戳的 recovery backup，目标写入失败会恢复源文件。
+4. 两个位置同时存在同名账户时，读取会明确显示冲突并使用用户级文件；`init`、`mark`、`sell`、`rebalance`、保存和迁移等所有写路径统一抛出 `PortfolioConflictError`。
+5. `/portfolio review` 将最新成功行情复制到内存中的账户快照，标记每个价格的来源与时间；失败标的显式回退到账户记录价。该估值不会更新 JSON、交易流水或历史记录。
+6. `/portfolio mark` 才是显式写入最新价格与账户历史的操作。
+
+测试传入显式 `base_dir` 时使用隔离存储，不扫描真实用户目录；生产默认路径才应用双位置冲突锁。
+
+### Wheel 内置资源
+
+`load_skills()` 先加载 wheel 中的只读 Skills，再按 Skill 声明名叠加项目 `skills/`；同名项目 Skill 显式覆盖内置版本。MCP 同理：当前目录存在 `.mcp.json` 时使用项目配置，否则读取 `resources/default.mcp.json`。`materialize_project_defaults()` 可显式复制模板，默认不覆盖已有文件。
+
+CI 会构建 wheel，在 checkout 外的新虚拟环境中安装并验证内置 Skills、MCP 配置、CLI、`--selfcheck` 和 `pip check`，避免 editable install 掩盖漏包。
 
 ### 构建与测试生成物
 
@@ -241,57 +325,71 @@ CLI 内部有三条可观察路径：
 
 ### 新增内置命令
 
-在 `ticker_dossier.cli.command_catalog` 添加 `CommandSpec`，再在 `ticker_dossier.cli.commands.CommandRouter` 实现处理。命令目录是帮助和补全的单一来源；领域计算仍应委托给 `research`。
+1. 在 `ticker_dossier.cli.command_catalog` 添加带唯一 `handler_key` 的 `CommandSpec`。
+2. 在对应的 `cli.handlers.session|research|portfolio|integrations|workflow` 模块实现方法，并把 key 映射到 `*_HANDLER_METHODS`。
+3. 领域计算仍委托给 `research` 或注入的 integration service。
+
+`CommandRouter` 会验证 catalog keys 与 handler registry 完全相等；帮助、别名和补全只读取 catalog，不维护第二份命令清单。
 
 ### 新增动态命令或 Skill
 
 - 项目动态命令放入 `.finance_agent/commands/**/*.md`。
 - 用户动态命令放入 `~/.finance-agent/commands/**/*.md`。
-- 项目 Skill 放入 `skills/<name>/SKILL.md`，通过 loader 校验后按需读取。
+- 项目 Skill 放入 `skills/<name>/SKILL.md`，通过 loader 校验后按需读取；它可以按声明名覆盖 wheel 内置 Skill。
 
 动态内容始终以 user-level 内容进入上下文，不能提升为系统策略。
 
 ### 新增 MCP server
 
-在 `.mcp.json` 添加 stdio server，设置 `command`、`args`、`cwd`、可选 `env` 和 `timeoutSeconds`。工具名自动带 server 命名空间；一个 server 失败不会阻止其他 server。非内置配置需先审查源码和启动参数，再使用运行时给出的指纹临时信任。
+在 `.mcp.json` 添加 stdio server，设置 `command`、`args`、`cwd`、可选 `env` 和 `timeoutSeconds`。工具名自动带 server 命名空间；一个 server 失败不会阻止其他 server。非内置配置需先审查源码和启动参数，再使用运行时给出的完整配置指纹信任。配置策略改在 `mcp.config`，协议/进程问题改在 `mcp.transport`，发现与注册问题改在 `mcp.runtime`。
 
-## 已知大文件与后续拆分
+## 已知技术债
 
-迁移目录只解决命名空间和所有权问题，没有自动消除模块内部复杂度。后续应按稳定接缝逐步拆分，并保持外部 import 与测试先稳定：
+已经落地的 Provider、executor、CLI handler、MCP 和 portfolio 子包不再列为待完成工作。当前仍存在以下受测试保护的耦合：
 
-| 当前模块 | 主要问题 | 建议接缝 |
+| 当前边界 | 剩余耦合 | 现有保护 |
 | --- | --- | --- |
-| `research/data.py` | Provider、并发、缓存、规范化、合并和诊断集中 | `providers/`、`normalization.py`、`selection.py`、`cache.py` |
-| `research/paper_portfolio.py` | 存储、迁移、评分、交易和渲染耦合 | repository、scoring、service、rendering |
-| `runtime/loop.py` | 循环、收敛、权限回执、任务边界和质量重试集中 | executor、convergence、receipts、policy guards |
-| `research/debate_orchestrator.py` | prompt、并发模型调用、校验和裁决集中 | roles、runner、evidence validation、judging |
-| `research/agent.py` | 领域 facade 同时承担路由与聚合 | query services、facade、task parsing |
-| `cli/commands.py` | session、research 和 workflow handler 集中 | 按命令类别拆 handler，并保留统一 router |
-| `integrations/mcp/client.py` | 配置、信任、传输、协议和注册集中 | config、trust、stdio transport、JSON-RPC client |
-| `cli/main.py` | 入口解析、交互会话、trace 和兜底集中 | application runner、session UI、trace observer |
+| `research/data.py` | 多源并发、选择、合并、缓存、熔断和覆盖诊断仍在一个领域模块 | Provider contract/选择/cache/circuit characterization tests；旧 import identity re-export |
+| `research/paper_portfolio.py` | 存储 repository、显式迁移和交易 mutation 仍由兼容 facade 集中管理 | `portfolio/models.py`、`scoring.py`、`rendering.py` 已纯化；全写路径冲突测试 |
+| `runtime/loop.py` | 模型收敛、Todo 进度、最终任务边界和报告质量重试仍共享循环 | 工具执行已由 `ToolExecutor` 隔离；session/security/事件顺序回归测试 |
+| `research/debate_orchestrator.py` | prompt、并发模型调用、证据校验和裁决集中，且保留延迟后端 fallback | debate 与金融回归测试 |
+| `research/agent.py` | 领域 facade 同时承担任务解析、查询编排和结果聚合 | `ResearchServices` 保证进程内单实例，CLI/Tool 路径复用同一对象 |
+| `cli/main.py` | 参数入口、交互生命周期、trace、首轮模型失败兜底仍集中 | CLI 回归测试与注册表统一关闭路径 |
+| 静态检查 | mypy 目前只覆盖稳定 contract；Ruff 复杂度上限 40 仍是存量回归 ceiling，并有少量逐文件例外 | CI 固定 target 清单、C901 门禁和架构 import tests |
 
-拆分顺序建议从 `research/data.py` 和 `cli/commands.py` 开始，因为二者修改频率高且已有明确行为测试。每次只移动一个接缝，先增加 characterization tests，再改 import，最后删除兼容层；不要一次性重写算法和目录。
+`research.data`、`research.paper_portfolio`、`integrations.mcp.client` 和 `runtime.loop` 中的部分重导出是有意保留的兼容面，不代表实现仍位于旧模块。
 
 ## 架构验证
 
 最低验证集：
 
 ```bash
+python -m ruff check src tests evals
 python -m pytest -q
 python -m compileall -q src/ticker_dossier evals
+python -m mypy \
+  src/ticker_dossier/runtime/{protocols,tools,execution}.py \
+  src/ticker_dossier/research/models.py \
+  src/ticker_dossier/integrations/market_data/base.py \
+  src/ticker_dossier/integrations/mcp/{config,transport,runtime}.py
 ticker-dossier --selfcheck
 python -m ticker_dossier /security
 python -m ticker_dossier /mcp
+python -m build
 ```
 
 架构改动还应检查：
 
 - 生产代码只通过 `ticker_dossier.*` 导入项目模块；
-- `runtime` 没有反向导入具体能力；
-- 新工具只在 composition root 完成默认注册；
+- `tests/test_architecture.py` 继续阻止 `runtime` 反向导入具体能力，以及 `research` 导入 CLI/Tool 适配器；
+- `command_catalog` 与 handler registry 没有 missing/orphan key；
+- 新工具只在 composition root 完成默认注册，并绑定到 registry-owned service；
 - 测试不依赖真实用户状态、真实凭据或未声明网络；
 - 注册表在成功和异常路径都会关闭；
+- wheel 在 checkout 外仍包含 Skills/MCP 资源并可执行 CLI 自检；
 - README、入口元数据和命令帮助保持一致。
+
+GitHub Actions 把验证分成 quality、Python 3.11/3.13 tests 和 wheel package 三个 job。quality job 运行 Ruff（含 C901）、compileall 与稳定 contract mypy；tests job 触发架构 import gates；package job 只在前两者通过后执行仓库外安装冒烟测试。
 
 ## 参考的开源结构
 

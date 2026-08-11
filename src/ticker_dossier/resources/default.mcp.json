@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "echo": {
+      "command": "python",
+      "args": ["-m", "ticker_dossier.integrations.mcp.echo_server"],
+      "cwd": ".",
+      "timeoutSeconds": 10
+    },
+    "finance": {
+      "command": "python",
+      "args": ["-m", "ticker_dossier.integrations.mcp.finance_server"],
+      "cwd": ".",
+      "timeoutSeconds": 10
+    }
+  }
+}

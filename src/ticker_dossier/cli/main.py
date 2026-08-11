@@ -388,7 +388,6 @@ def make_observer(enabled):
 def interactive() -> int:
     from ticker_dossier.cli.commands import CommandRouter
     from ticker_dossier.runtime.loop import AgentSession, ModelCallError
-    from ticker_dossier.research.agent import FinanceResearchAgent
 
     print(render_welcome())
     print()
@@ -396,7 +395,7 @@ def interactive() -> int:
     trace = TracePrinter(lambda: think_mode)
     agent = build_agent(observer=trace.observe)
     session = AgentSession(agent)
-    finance = FinanceResearchAgent()
+    finance = _finance_service(agent.registry)
     router = CommandRouter(
         agent.registry,
         finance_agent=finance,
@@ -512,7 +511,11 @@ def main(argv: list[str] | None = None) -> int:
                 trace.flush()
                 print(answer)
                 return 0
-            result = CommandRouter(reg, trace=trace.command).handle(task, think_enabled="compact")
+            result = CommandRouter(
+                reg,
+                finance_agent=_finance_service(reg),
+                trace=trace.command,
+            ).handle(task, think_enabled="compact")
             if result.handled:
                 if result.selfcheck:
                     return selfcheck()
@@ -533,14 +536,13 @@ def main(argv: list[str] | None = None) -> int:
 
     trace = TracePrinter(lambda: "compact")
     agent = build_agent(observer=trace.observe)
+    finance = _finance_service(agent.registry)
     try:
         try:
             answer = agent.run(task)
         except ModelCallError as exc:
             if exc.turn == 1 and _should_route_finance(task):
-                from ticker_dossier.research.agent import FinanceResearchAgent
-
-                answer = _run_finance_fallback(task, FinanceResearchAgent(), trace, exc)
+                answer = _run_finance_fallback(task, finance, trace, exc)
             else:
                 trace.flush()
                 print(_model_failure_message(exc))
@@ -550,6 +552,17 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     finally:
         _close_registry(agent.registry)
+
+
+def _finance_service(registry):  # noqa: ANN001, ANN202
+    """Return the registry-owned facade, with a compatibility fallback for tests."""
+    from ticker_dossier.bootstrap import ResearchServices
+    from ticker_dossier.research.agent import FinanceResearchAgent
+
+    services = registry.get_service("research")
+    if isinstance(services, ResearchServices):
+        return services.finance
+    return FinanceResearchAgent()
 
 
 def _runtime_bottom_toolbar(think_mode: str, agent, finance, dynamic: DynamicSlashCommands) -> str:  # noqa: ANN001

@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,8 +8,21 @@ version = "0.1.0"
 description = "A safety-aware command-line agent for evidence-backed stock research"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "TickerDossier contributors" }]
+keywords = ["ai-agent", "finance", "mcp", "stock-research"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Financial and Insurance Industry",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Office/Business :: Financial :: Investment",
+]
 dependencies = [
   "httpx>=0.27",
   "pandas>=2.0",
@@ -22,9 +35,20 @@ providers = [
   "tushare>=1.4",
   "yfinance>=0.2",
 ]
-dev = [
+test = [
   "pytest>=8.0",
 ]
+dev = [
+  "build>=1.2",
+  "mypy>=1.17",
+  "pytest>=8.0",
+  "ruff>=0.12",
+]
+
+[project.urls]
+Homepage = "https://github.com/nixiakT/ticker-dossier"
+Issues = "https://github.com/nixiakT/ticker-dossier/issues"
+Repository = "https://github.com/nixiakT/ticker-dossier.git"
 
 [project.scripts]
 ticker-dossier = "ticker_dossier.cli.main:main"
@@ -33,7 +57,47 @@ finance-agent = "ticker_dossier.cli.main:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"ticker_dossier.resources" = [
+  "default.mcp.json",
+  "skills/README.md",
+  "skills/*/SKILL.md",
+]
+
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["C901", "E4", "E7", "E9", "F"]
+
+[tool.ruff.lint.mccabe]
+# Start with a regression ceiling for the legacy scoring/quality functions.
+# New decomposition work should ratchet this number down instead of raising it.
+max-complexity = 40
+
+# Keep the first CI gate useful without forcing an unrelated repository-wide
+# rewrite.  These narrow exceptions document existing debt; new files and all
+# other rules in the selected families remain enforced.
+[tool.ruff.lint.per-file-ignores]
+"src/ticker_dossier/cli/main.py" = ["E702"]
+"src/ticker_dossier/research/data.py" = ["F401"]
+"src/ticker_dossier/research/resolver.py" = ["F401"]
+"src/ticker_dossier/research/web.py" = ["F541"]
+"src/ticker_dossier/tools/evolution_tools.py" = ["F541"]
+"tests/test_finance_core.py" = ["F401"]
+"tests/test_finance_mcp.py" = ["F401"]
+
+[tool.mypy]
+python_version = "3.11"
+follow_imports = "skip"
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_return_any = true
+no_implicit_optional = true
+warn_unused_configs = true

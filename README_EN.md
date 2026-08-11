@@ -7,6 +7,7 @@
 Turn quotes, fundamentals, news, counter-evidence, and risk checks into inspectable research dossiers for A-shares, Hong Kong, and U.S. equities—with paper portfolios, MCP / Skill extensions, and local-first workflows.
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
+[![CI](https://github.com/nixiakT/ticker-dossier/actions/workflows/ci.yml/badge.svg)](https://github.com/nixiakT/ticker-dossier/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-2ea44f)](LICENSE)
 
 [中文](README.md) · [Quick start](#quick-start) · [Capabilities](#core-capabilities) · [Architecture](docs/ARCHITECTURE.md)
@@ -32,7 +33,7 @@ The first two slash commands are deterministic, repeatable entry points. Natural
 | --- | --- | --- |
 | 🔎 | **Evidence-aware research** | Quotes, history, fundamentals, and news with sources, timestamps, coverage, and explicit data gaps. |
 | 📊 | **Structured analysis** | Indicators, quality gates, research dossiers, comparisons, multi-perspective review, and moving-average backtests. |
-| 🧪 | **Paper experiments** | Prediction tracking and later scoring, simulated positions, trades, and NAV—never a live brokerage account. |
+| 🧪 | **Paper experiments** | Prediction tracking, simulated positions, read-only current valuation, and trade history—never a live brokerage account. |
 | 🧩 | **Extensible runtime** | A ReAct tool loop, MCP, Skills, memory, confirmations, and `FakeBackend` when no model key is configured. |
 
 Provider availability depends on networking, credentials, and upstream services. TickerDossier labels sample fallbacks, conflicting fields, and missing data instead of asking the model to invent values.
@@ -59,6 +60,8 @@ Install the optional A-share, Hong Kong, and U.S. market-data providers:
 python -m pip install -e ".[providers]"
 ```
 
+The distribution bundles read-only Skills and a default MCP configuration. A project-local `skills/` directory and `.mcp.json` can override them, so an installed wheel remains self-contained outside the checkout.
+
 For model-driven natural-language research, set `DEEPSEEK_API_KEY` in `.env.local`. The backend uses an OpenAI-compatible API. Without a key it falls back to the offline backend and does not make paid requests.
 
 > `ticker-dossier` is the primary command. The former `finance-agent` command remains as a compatibility alias.
@@ -79,9 +82,12 @@ ticker-dossier /backtest TSLA 20 60 2y
 
 # Local paper records only—never a live order
 ticker-dossier /portfolio init 100000 AAPL MSFT NVDA
-ticker-dossier /portfolio status
+ticker-dossier /portfolio locate default
+ticker-dossier /portfolio review
 ticker-dossier /predict list
 ```
+
+`/portfolio review` values holdings in memory with the latest available quotes and does not write the ledger. After checking paths and backups, migrate a legacy workspace account explicitly with `/portfolio migrate default`; migration refuses to overwrite or merge an existing destination.
 
 ## Safety boundaries
 
@@ -103,35 +109,38 @@ See [Architecture](docs/ARCHITECTURE.md#安全边界) for the complete threat an
 
 ```mermaid
 flowchart LR
-    U["Terminal<br/>interactive · one-shot · slash commands"] --> C["CLI<br/>UI · command routing"]
+    U["Terminal<br/>interactive · one-shot · slash commands"] --> C["CLI<br/>command catalog · handler registry"]
     C --> B["bootstrap.py<br/>composition root"]
-    B --> A["Runtime<br/>agent loop · context · permissions"]
+    B --> A["Runtime<br/>AgentLoop · ToolExecutor"]
     B --> L["LLM adapters<br/>DeepSeek-compatible · FakeBackend"]
-    B --> T["Tool registry"]
+    B --> T["ToolRegistry<br/>ResearchServices · managed resources"]
     A --> L
     A --> T
-    T --> R["Research<br/>data · analysis · paper portfolio"]
-    T --> I["Integrations<br/>HTTP · MCP · WeChat · scheduler"]
-    R --> I
-    I --> E["External providers / services"]
+    T --> R["Research<br/>selection · analysis · portfolio"]
+    T --> I["Integrations<br/>MCP runtime · WeChat · scheduler"]
+    R --> P["market_data providers<br/>Yahoo · AKShare · Tushare · Alpha Vantage"]
+    I --> E["External services"]
+    P --> E
     R --> S[("Local state")]
+    K["Packaged resources<br/>Skills · MCP defaults"] --> T
 ```
 
-`bootstrap.py` is the single composition root. `runtime` does not import concrete financial implementations; domain logic lives in `research`, external I/O in `integrations`, and model-visible capabilities adapt through the common contracts in `tools`.
+`bootstrap.py` creates one `ResearchServices` instance and publishes it through `ToolRegistry`, so the CLI and Tool adapters share the same research service. `runtime.execution` owns permission checks, reused receipts, and side-effect boundaries; market providers and MCP configuration, transport, and lifecycle live under `integrations`.
 
 ```text
 src/ticker_dossier/
-├── cli/             # Entry points, interactive UI, and command routing
-├── runtime/         # Agent loop, context, permissions, and tool contracts
+├── cli/handlers/    # Slash-command handlers grouped by capability
+├── runtime/         # Agent loop, executor, context, permissions, contracts
 ├── llm/             # Real and offline model adapters
-├── research/        # Data, analysis, backtests, predictions, paper portfolio
+├── research/        # Selection/merge, analysis, backtests, portfolio
 ├── tools/           # Tool adapters
-├── integrations/    # HTTP, MCP, WeChat, and scheduling
+├── integrations/    # market_data, MCP, HTTP, WeChat, scheduling
+├── resources/       # Skills and MCP defaults bundled in the wheel
 ├── skills/          # Skill loading and generation
 └── bootstrap.py     # Composition root
 ```
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for dependency rules, state boundaries, known debt, and the staged decomposition plan.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for dependency rules, state migration, and known debt.
 
 <details>
 <summary><strong>Command reference</strong></summary>
@@ -144,12 +153,12 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for dependency rules, state bou
 | `/financials AAPL`, `/news AAPL 5` | Fundamentals and related news |
 | `/quality AAPL 1y`, `/report AAPL 1y` | Quality gate and research dossier |
 | `/compare NVDA AMD 1y`, `/debate NVDA AMD 1y` | Same-basis comparison and multi-perspective review |
-| `/portfolio status`, `/predict list` | Paper portfolio and prediction ledger |
+| `/portfolio status\|review\|locate\|migrate`, `/predict list` | Paper portfolio, path migration, and prediction ledger |
 | `/skills`, `/mcp`, `/tools` | Extensions and tool diagnostics |
 | `/trace on\|off`, `/trace` | Control and inspect execution traces |
 | `/schedule list`, `/wechat status` | Local jobs and message-connector status |
 
-One command catalog drives help and fuzzy completion. Project commands, Skills, and MCP prompts are merged into the runtime menu.
+One command catalog drives routing, help, and fuzzy completion, and validates the handler registry at startup. Project commands, Skills, and MCP prompts are merged into the runtime menu.
 
 </details>
 
@@ -174,18 +183,27 @@ Configuration is loaded in this order: existing environment → `.env.local` →
 
 To avoid losing data during the rename, `.finance_agent/`, `~/.finance-agent/`, `FINANCE_AGENT_LANG`, and `MINI_OPENCLAW_*` remain supported as legacy locations and variables. See [.env.example](.env.example) for the complete template.
 
+If user-level and workspace storage contain the same account name, reads show the conflict and prefer the user-level file, while every write remains locked until the user reviews and resolves the duplicate.
+
 </details>
 
 ## Development
 
 ```bash
 python -m pip install -e ".[dev,providers]"
+python -m ruff check src tests evals
 python -m pytest -q
+python -m mypy \
+  src/ticker_dossier/runtime/{protocols,tools,execution}.py \
+  src/ticker_dossier/research/models.py \
+  src/ticker_dossier/integrations/market_data/base.py \
+  src/ticker_dossier/integrations/mcp/{config,transport,runtime}.py
 python -m compileall -q src/ticker_dossier evals
 python -m ticker_dossier --selfcheck
+python -m build
 ```
 
-Evaluation utilities live in `evals/`, tests in `tests/`, and versioned project Skills in `skills/`. Before committing, make sure `.env.local`, `.finance_agent/`, personal state, and generated output remain untracked.
+CI tests Python 3.11/3.13 and runs Ruff (including a complexity gate), targeted mypy checks for stable contracts, dependency-direction tests, and an outside-the-checkout wheel/resource smoke test. Evaluation utilities live in `evals/`, and versioned project Skills in `skills/`; keep credentials, personal state, and generated output untracked.
 
 ## License
 

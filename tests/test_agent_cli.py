@@ -745,13 +745,12 @@ def test_web_tools_block_secrets_before_outbound_requests(monkeypatch: pytest.Mo
     assert "[REDACTED_SECRET]" in str(trace_events)
 
 
-def test_fetch_slash_command_reuses_allowlist_and_untrusted_wrapper(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    import ticker_dossier.tools.web_tools as web_tools
-
-    monkeypatch.setattr(web_tools, "web_fetch", lambda url, max_chars=4000: "external page")
-    router = CommandRouter(ToolRegistry(), finance_agent=StatusFinance())  # type: ignore[arg-type]
+def test_fetch_slash_command_reuses_allowlist_and_untrusted_wrapper() -> None:
+    router = CommandRouter(
+        ToolRegistry(),
+        finance_agent=StatusFinance(),  # type: ignore[arg-type]
+        web_fetch_service=lambda url, max_chars=4000: "external page",
+    )
 
     output = router.handle("/fetch https://example.com/research").output
     blocked = router.handle("/fetch https://evil.com/collect").output
@@ -1020,6 +1019,69 @@ def test_portfolio_command_builds_and_marks_paper_account(tmp_path: Any, monkeyp
     assert "纸面组合诊断" in review
 
 
+def test_portfolio_commands_share_one_explicit_account_selector(
+    tmp_path: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import ticker_dossier.research.paper_portfolio as portfolio
+
+    monkeypatch.chdir(tmp_path)
+    user_dir = tmp_path / "portfolios"
+    monkeypatch.setattr(portfolio, "PORTFOLIO_DIR", user_dir)
+    monkeypatch.setattr(portfolio, "LEGACY_PORTFOLIO_DIR", tmp_path / "workspace" / ".finance_agent")
+    router = CommandRouter(ToolRegistry(), finance_agent=PortfolioFinance())  # type: ignore[arg-type]
+
+    built = router.handle("/portfolio init 100000 AAPL MSFT --account growth").output
+    status = router.handle("/portfolio status --account=growth").output
+    trades = router.handle("/portfolio trades growth 5").output
+    pnl = router.handle("/portfolio pnl 5 --account growth").output
+    review = router.handle("/portfolio review AAPL MSFT --account growth").output
+
+    assert "模拟投资账户：growth" in built
+    assert "模拟投资账户：growth" in status
+    assert "纸面交易流水" in trades
+    assert "每日买卖盈亏" in pnl
+    assert "纸面组合诊断：growth" in review
+    assert (user_dir / "portfolio_growth.json").exists()
+    assert not (user_dir / "portfolio_default.json").exists()
+
+
+def test_portfolio_account_selector_rejects_ambiguous_duplicates() -> None:
+    router = CommandRouter(ToolRegistry(), finance_agent=PortfolioFinance())  # type: ignore[arg-type]
+
+    output = router.handle("/portfolio status --account growth --account income").output
+
+    assert "只能指定一次" in output
+
+
+def test_portfolio_locate_and_migrate_commands_are_non_overwriting(
+    tmp_path: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import ticker_dossier.research.paper_portfolio as portfolio
+    from ticker_dossier.research.agent import FinanceResearchAgent
+    from ticker_dossier.research.data import ProviderChain
+
+    workspace_dir = tmp_path / "workspace" / ".finance_agent"
+    user_dir = tmp_path / "user" / "portfolios"
+    portfolio.create_account(initial_cash=50_000, name="growth", base_dir=workspace_dir)
+    monkeypatch.setattr(portfolio, "PORTFOLIO_DIR", user_dir)
+    monkeypatch.setattr(portfolio, "LEGACY_PORTFOLIO_DIR", workspace_dir)
+    router = CommandRouter(
+        ToolRegistry(),
+        finance_agent=FinanceResearchAgent(provider=ProviderChain(providers=[])),
+    )
+
+    located = router.handle("/portfolio locate --account growth").output
+    migrated = router.handle("/portfolio migrate growth").output
+    refused = router.handle("/portfolio migrate --account=growth").output
+
+    assert "正在兼容读取 workspace" in located
+    assert "迁移完成：growth" in migrated
+    assert "恢复备份" in migrated
+    assert "目标" in refused and "已存在" in refused and "不会覆盖或合并" in refused
+
+
 def test_learn_history_command_updates_skill_and_prediction(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     import ticker_dossier.research.history_learning as history_learning
     import ticker_dossier.research.predictions as predictions
@@ -1035,6 +1097,25 @@ def test_learn_history_command_updates_skill_and_prediction(tmp_path: Any, monke
     assert "历史学习预测" in output
     assert "Skill updated" in output
     assert "Prediction recorded" in output
+
+
+def test_learn_alias_routes_to_the_catalog_handler() -> None:
+    class Finance(StatusFinance):
+        def learn_from_history(
+            self,
+            symbol: str,
+            period: str,
+            horizon_days: int,
+            record: bool,
+            update_skill: bool,
+        ) -> str:
+            return f"learned {symbol} {period} {horizon_days} {record} {update_skill}"
+
+    router = CommandRouter(ToolRegistry(), finance_agent=Finance())  # type: ignore[arg-type]
+
+    output = router.handle("/learn AAPL 1y 15").output
+
+    assert output == "learned AAPL 1y 15 True True"
 
 
 def test_resolve_command_uses_finance_resolver() -> None:

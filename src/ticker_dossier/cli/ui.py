@@ -111,6 +111,8 @@ def render_help(width: int | None = None) -> str:
     labels = {
         "session": ("会话与状态", "Session"),
         "research": ("股票研究", "Research"),
+        "integrations": ("数据与集成", "Integrations"),
+        "portfolio": ("纸面组合", "Portfolio"),
         "workflow": ("工作流", "Workflow"),
     }
     lines = ["ticker-dossier 功能菜单" if lang == "zh" else "ticker-dossier command menu", ""]
@@ -121,6 +123,9 @@ def render_help(width: int | None = None) -> str:
         lines.append(f"[{zh if lang == 'zh' else en}]")
         for spec in specs:
             description = spec.description_zh if lang == "zh" else spec.description_en
+            if spec.aliases:
+                alias_text = ", ".join(f"/{alias}" for alias in spec.aliases)
+                description += f" ({'别名' if lang == 'zh' else 'aliases'}: {alias_text})"
             if budget < 44:
                 lines.append("  " + _truncate_display(spec.usage, max(budget - 2, 1)))
                 lines.append("    " + _truncate_display(description, max(budget - 4, 1)))

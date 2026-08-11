@@ -7,6 +7,7 @@
 把行情、基本面、新闻、反证与风险检查组织成可追溯的研究档案，面向 A 股、港股和美股，支持纸面组合、MCP / Skill 扩展与本地优先的工作流。
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
+[![CI](https://github.com/nixiakT/ticker-dossier/actions/workflows/ci.yml/badge.svg)](https://github.com/nixiakT/ticker-dossier/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-2ea44f)](LICENSE)
 
 [English](README_EN.md) · [快速开始](#快速开始) · [能力](#核心能力) · [架构](docs/ARCHITECTURE.md)
@@ -32,7 +33,7 @@ ticker-dossier "比较 NVDA 和 AMD 的基本面、近期走势与主要风险"
 | --- | --- | --- |
 | 🔎 | **证据化研究** | 行情、历史价格、基本面与新闻，并保留来源、时间戳、覆盖率和数据缺口。 |
 | 📊 | **结构化分析** | 技术指标、质量门禁、研究档案、标的对比、多视角审查和均线策略回测。 |
-| 🧪 | **纸面实验** | 预测记账与到期评分、模拟持仓、交易流水和净值；始终不触达真实券商。 |
+| 🧪 | **纸面实验** | 预测记账与到期评分、模拟持仓、只读最新估值和交易流水；始终不触达真实券商。 |
 | 🧩 | **可扩展运行时** | ReAct 工具循环、MCP、Skills、记忆、确认机制，以及无密钥时的 `FakeBackend`。 |
 
 Provider 可用性取决于网络、凭据和上游服务。TickerDossier 会明确标记样例回退、冲突字段与缺失数据，不用模型猜测补数。
@@ -59,6 +60,8 @@ ticker-dossier /help
 python -m pip install -e ".[providers]"
 ```
 
+安装包内置只读的 Skills 与默认 MCP 配置；项目目录中的 `skills/` 和 `.mcp.json` 可按需覆盖，因此 wheel 在仓库外也能自检和运行。
+
 需要模型驱动的自然语言研究时，在 `.env.local` 中配置 `DEEPSEEK_API_KEY`。项目使用 OpenAI-compatible API；未配置时自动回退到离线后端，不发起付费请求。
 
 > `ticker-dossier` 是新的主命令；旧的 `finance-agent` 命令保留为兼容别名。
@@ -79,9 +82,12 @@ ticker-dossier /backtest TSLA 20 60 2y
 
 # 只会写入纸面记录，不会真实下单
 ticker-dossier /portfolio init 100000 AAPL MSFT NVDA
-ticker-dossier /portfolio status
+ticker-dossier /portfolio locate default
+ticker-dossier /portfolio review
 ticker-dossier /predict list
 ```
+
+`/portfolio review` 用最新可得行情在内存中估值，不写回账本；旧 workspace 账户可在核对位置和备份后用 `/portfolio migrate default` 显式迁移，目标已存在时会拒绝覆盖或合并。
 
 ## 安全边界
 
@@ -103,35 +109,38 @@ ticker-dossier /predict list
 
 ```mermaid
 flowchart LR
-    U["Terminal<br/>interactive · one-shot · slash commands"] --> C["CLI<br/>UI · command routing"]
+    U["Terminal<br/>interactive · one-shot · slash commands"] --> C["CLI<br/>command catalog · handler registry"]
     C --> B["bootstrap.py<br/>composition root"]
-    B --> A["Runtime<br/>agent loop · context · permissions"]
+    B --> A["Runtime<br/>AgentLoop · ToolExecutor"]
     B --> L["LLM adapters<br/>DeepSeek-compatible · FakeBackend"]
-    B --> T["Tool registry"]
+    B --> T["ToolRegistry<br/>ResearchServices · managed resources"]
     A --> L
     A --> T
-    T --> R["Research<br/>data · analysis · paper portfolio"]
-    T --> I["Integrations<br/>HTTP · MCP · WeChat · scheduler"]
-    R --> I
-    I --> E["External providers / services"]
+    T --> R["Research<br/>selection · analysis · portfolio"]
+    T --> I["Integrations<br/>MCP runtime · WeChat · scheduler"]
+    R --> P["market_data providers<br/>Yahoo · AKShare · Tushare · Alpha Vantage"]
+    I --> E["External services"]
+    P --> E
     R --> S[("Local state")]
+    K["Packaged resources<br/>Skills · MCP defaults"] --> T
 ```
 
-`bootstrap.py` 是唯一组装点；`runtime` 不反向导入具体金融实现，领域逻辑位于 `research`，外部 I/O 位于 `integrations`，模型可见能力通过 `tools` 适配到统一契约。
+`bootstrap.py` 创建单一 `ResearchServices` 并放入 `ToolRegistry`，CLI 与 Tool 适配器复用同一个研究服务。`runtime.execution` 统一处理权限、复用回执和副作用边界；市场 Provider 与 MCP 的配置、传输和生命周期都位于 `integrations`。
 
 ```text
 src/ticker_dossier/
-├── cli/             # 入口、交互 UI 与命令路由
-├── runtime/         # Agent 循环、上下文、权限与工具契约
+├── cli/handlers/    # 按能力分组的 slash-command handlers
+├── runtime/         # Agent 循环、执行器、上下文、权限与契约
 ├── llm/             # 真实模型和离线模型适配器
-├── research/        # 数据、分析、回测、预测与纸面组合
+├── research/        # 选择/合并、分析、回测、预测与纸面组合
 ├── tools/           # Tool 适配器
-├── integrations/    # HTTP、MCP、微信与调度
+├── integrations/    # market_data、MCP、HTTP、微信与调度
+├── resources/       # wheel 内置的 Skills 与 MCP 默认配置
 ├── skills/          # Skill 加载和生成逻辑
 └── bootstrap.py     # composition root
 ```
 
-设计约束、状态边界、已知技术债和下一步拆分路线见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+设计约束、状态迁移和已知技术债见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
 <details>
 <summary><strong>常用命令</strong></summary>
@@ -144,12 +153,12 @@ src/ticker_dossier/
 | `/financials AAPL`、`/news AAPL 5` | 基本面与相关新闻 |
 | `/quality AAPL 1y`、`/report AAPL 1y` | 质量门禁与研究档案 |
 | `/compare NVDA AMD 1y`、`/debate NVDA AMD 1y` | 同口径对比与多视角审查 |
-| `/portfolio status`、`/predict list` | 纸面组合与预测账本 |
+| `/portfolio status\|review\|locate\|migrate`、`/predict list` | 纸面组合、位置迁移与预测账本 |
 | `/skills`、`/mcp`、`/tools` | 扩展能力与工具诊断 |
 | `/trace on\|off`、`/trace` | 执行轨迹控制与回看 |
 | `/schedule list`、`/wechat status` | 本地任务与消息连接状态 |
 
-命令目录同时驱动帮助和模糊补全；项目命令、Skills 与 MCP prompts 会在运行时合并进入菜单。
+统一 command catalog 同时驱动路由、帮助和模糊补全，并在启动时校验 handler registry；项目命令、Skills 与 MCP prompts 会在运行时合并进入菜单。
 
 </details>
 
@@ -174,18 +183,27 @@ src/ticker_dossier/
 
 为避免升级时丢失用户数据，现有 `.finance_agent/`、`~/.finance-agent/`、`FINANCE_AGENT_LANG` 和 `MINI_OPENCLAW_*` 位置/变量继续兼容。完整示例见 [.env.example](.env.example)。
 
+若用户级与 workspace 中存在两份同名纸面账户，只读命令会显示冲突并优先展示用户级文件，所有写操作都会锁定，直到用户人工核对并消除冲突。
+
 </details>
 
 ## 开发
 
 ```bash
 python -m pip install -e ".[dev,providers]"
+python -m ruff check src tests evals
 python -m pytest -q
+python -m mypy \
+  src/ticker_dossier/runtime/{protocols,tools,execution}.py \
+  src/ticker_dossier/research/models.py \
+  src/ticker_dossier/integrations/market_data/base.py \
+  src/ticker_dossier/integrations/mcp/{config,transport,runtime}.py
 python -m compileall -q src/ticker_dossier evals
 python -m ticker_dossier --selfcheck
+python -m build
 ```
 
-评估工具位于 `evals/`，测试位于 `tests/`，可版本化项目 Skills 位于 `skills/`。提交前请确认没有加入 `.env.local`、`.finance_agent/`、个人状态或生成目录。
+CI 在 Python 3.11/3.13 运行测试，并执行 Ruff（含复杂度门禁）、稳定契约 mypy、依赖方向测试，以及仓库外 wheel 安装/资源自检。评估工具位于 `evals/`，可版本化项目 Skills 位于 `skills/`；提交前请确认没有加入凭据、个人状态或生成目录。
 
 ## License
 

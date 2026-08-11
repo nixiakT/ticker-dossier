@@ -5,7 +5,7 @@ this low-level module never imports finance, MCP, WeChat, or scheduler code.
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
 
 @dataclass
@@ -31,6 +31,7 @@ class Tool:
 class ToolRegistry:
     _tools: dict[str, Tool] = field(default_factory=dict)
     _managed_resources: list[Any] = field(default_factory=list, repr=False)
+    _services: dict[str, Any] = field(default_factory=dict, repr=False)
 
     def register(self, tool: Tool) -> None:
         if tool.name in self._tools:
@@ -49,6 +50,18 @@ class ToolRegistry:
     def manage(self, resource: Any) -> None:
         """Attach a runtime resource so callers can inspect and close it centrally."""
         self._managed_resources.append(resource)
+
+    def provide_service(self, name: str, service: Any) -> None:
+        """Expose one application-owned service without importing its concrete type."""
+        clean = str(name).strip()
+        if not clean:
+            raise ValueError("service name must not be empty")
+        if clean in self._services:
+            raise ValueError(f"service already registered: {clean}")
+        self._services[clean] = service
+
+    def get_service(self, name: str) -> Any | None:
+        return self._services.get(name)
 
     def mcp_statuses(self) -> list[dict[str, str]]:
         rows: list[dict[str, str]] = []
@@ -77,7 +90,7 @@ class ToolRegistry:
             if not callable(getter):
                 continue
             try:
-                return getter(server, name, arguments)
+                return cast(dict[str, Any], getter(server, name, arguments))
             except KeyError:
                 continue
         raise KeyError(f"unknown MCP prompt '{server}/{name}'")

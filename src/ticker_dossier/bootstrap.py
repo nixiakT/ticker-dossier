@@ -9,10 +9,29 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable, Iterable
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 from typing import Any
 
 from ticker_dossier.runtime.loop import AgentLoop
 from ticker_dossier.runtime.tools import ToolRegistry
+
+if TYPE_CHECKING:
+    from ticker_dossier.research.agent import FinanceResearchAgent
+
+
+@dataclass(frozen=True)
+class ResearchServices:
+    """Application-owned research services shared by CLI and tool adapters."""
+
+    finance: FinanceResearchAgent
+
+
+def build_research_services() -> ResearchServices:
+    """Create one finance facade and its provider lifecycle for an application."""
+    from ticker_dossier.research.agent import FinanceResearchAgent
+
+    return ResearchServices(finance=FinanceResearchAgent())
 
 
 def _compat_env(primary: str, legacy: str, default: str = "") -> str:
@@ -21,22 +40,24 @@ def _compat_env(primary: str, legacy: str, default: str = "") -> str:
     return os.environ.get(legacy, default) if value is None else value
 
 
-def build_default_registry() -> ToolRegistry:
+def build_default_registry(services: ResearchServices | None = None) -> ToolRegistry:
     """Create the complete built-in tool registry and connect project MCP."""
     from ticker_dossier.integrations.mcp.client import connect_project_mcp
-    from ticker_dossier.tools.evolution_tools import evolution_tools
-    from ticker_dossier.tools.finance_tools import finance_tools
+    from ticker_dossier.tools.evolution_tools import build_evolution_tools
+    from ticker_dossier.tools.finance_tools import build_finance_tools
     from ticker_dossier.tools.fs import read_tool, write_tool
     from ticker_dossier.tools.memory_tools import memory_tools
     from ticker_dossier.tools.more_tools import edit_tool, glob_tool, grep_tool, task_list_tool
-    from ticker_dossier.tools.scheduler_tools import scheduler_tools
+    from ticker_dossier.tools.scheduler_tools import build_scheduler_tools
     from ticker_dossier.tools.shell import bash_tool
     from ticker_dossier.tools.skill_tools import read_skill_tool
     from ticker_dossier.tools.trace2skill_tools import trace2skill_tools
     from ticker_dossier.tools.web_tools import web_tools
     from ticker_dossier.tools.wechat_tools import wechat_tools
 
+    active_services = services or build_research_services()
     registry = ToolRegistry()
+    registry.provide_service("research", active_services)
     for tool in (
         read_tool,
         write_tool,
@@ -47,11 +68,11 @@ def build_default_registry() -> ToolRegistry:
         task_list_tool,
         *memory_tools,
         read_skill_tool,
-        *finance_tools,
-        *evolution_tools,
+        *build_finance_tools(active_services.finance),
+        *build_evolution_tools(active_services.finance),
         *trace2skill_tools,
         *web_tools,
-        *scheduler_tools,
+        *build_scheduler_tools(active_services.finance),
         *wechat_tools,
     ):
         registry.register(tool)

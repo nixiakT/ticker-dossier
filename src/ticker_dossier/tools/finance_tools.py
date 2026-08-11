@@ -1,55 +1,70 @@
 """Finance tools for stock research."""
 from __future__ import annotations
 
+from dataclasses import replace
+
 from ticker_dossier.runtime.tools import Tool
 from ticker_dossier.research.agent import FinanceResearchAgent
 
 
-_agent = FinanceResearchAgent()
+_fallback_agent: FinanceResearchAgent | None = None
+
+
+def _default_agent() -> FinanceResearchAgent:
+    """Lazily support directly imported legacy tool objects.
+
+    Application registries bind tools to an explicitly owned research service;
+    this fallback exists only for callers that execute the module-level
+    compatibility objects themselves.
+    """
+    global _fallback_agent
+    if _fallback_agent is None:
+        _fallback_agent = FinanceResearchAgent()
+    return _fallback_agent
 
 
 def _route_task(task: str) -> str:
-    return _agent.route_task(task)
+    return _default_agent().route_task(task)
 
 
 def _get_quote(symbol: str) -> str:
-    return _agent.get_quote(symbol)
+    return _default_agent().get_quote(symbol)
 
 
 def _resolve_symbol(query: str, limit: int = 8) -> str:
-    return _agent.resolve_symbol(query, limit)
+    return _default_agent().resolve_symbol(query, limit)
 
 
 def _get_price_history(symbol: str, period: str = "1y", format: str = "summary") -> str:
-    return _agent.get_price_history(symbol, period, format)
+    return _default_agent().get_price_history(symbol, period, format)
 
 
 def _get_financials(symbol: str) -> str:
-    return _agent.get_financials(symbol)
+    return _default_agent().get_financials(symbol)
 
 
 def _get_news(symbol: str, limit: int = 5) -> str:
-    return _agent.get_news(symbol, limit)
+    return _default_agent().get_news(symbol, limit)
 
 
 def _calculate_indicators(symbol: str, period: str = "1y") -> str:
-    return _agent.calculate_indicators(symbol, period)
+    return _default_agent().calculate_indicators(symbol, period)
 
 
 def _generate_report(symbol: str, period: str = "1y") -> str:
-    return _agent.generate_report(symbol, period)
+    return _default_agent().generate_report(symbol, period)
 
 
 def _quality_screen(symbol: str, period: str = "1y") -> str:
-    return _agent.quality_screen(symbol, period)
+    return _default_agent().quality_screen(symbol, period)
 
 
 def _compare_stocks(symbols: list[str] | str, period: str = "1y") -> str:
-    return _agent.compare_stocks(symbols, period)
+    return _default_agent().compare_stocks(symbols, period)
 
 
 def _debate_stocks(symbols: list[str] | str, period: str = "1y") -> str:
-    return _agent.debate_stocks(symbols, period)
+    return _default_agent().debate_stocks(symbols, period)
 
 
 def _backtest_strategy(
@@ -60,11 +75,13 @@ def _backtest_strategy(
     slow_window: int | None = None,
     initial_cash: float = 100_000,
 ) -> str:
-    return _agent.backtest_strategy(symbol, strategy, period, fast_window, slow_window, initial_cash)
+    return _default_agent().backtest_strategy(
+        symbol, strategy, period, fast_window, slow_window, initial_cash
+    )
 
 
 def _daily_brief(symbols: list[str] | str, period: str = "3mo") -> str:
-    return _agent.daily_brief(symbols, period)
+    return _default_agent().daily_brief(symbols, period)
 
 
 def _build_paper_portfolio(
@@ -74,7 +91,9 @@ def _build_paper_portfolio(
     max_positions: int = 5,
     name: str = "default",
 ) -> str:
-    return _agent.build_paper_portfolio(symbols, initial_cash, period, max_positions, name)
+    return _default_agent().build_paper_portfolio(
+        symbols, initial_cash, period, max_positions, name
+    )
 
 
 def _rebalance_paper_portfolio(
@@ -83,15 +102,15 @@ def _rebalance_paper_portfolio(
     max_positions: int = 5,
     name: str = "default",
 ) -> str:
-    return _agent.rebalance_paper_portfolio(symbols, period, max_positions, name)
+    return _default_agent().rebalance_paper_portfolio(symbols, period, max_positions, name)
 
 
 def _mark_paper_portfolio(name: str = "default") -> str:
-    return _agent.mark_paper_portfolio(name)
+    return _default_agent().mark_paper_portfolio(name)
 
 
 def _show_paper_portfolio(name: str = "default") -> str:
-    return _agent.show_paper_portfolio(name)
+    return _default_agent().show_paper_portfolio(name)
 
 
 def _sell_paper_holding(
@@ -100,15 +119,15 @@ def _sell_paper_holding(
     name: str = "default",
     reason: str = "manual sell",
 ) -> str:
-    return _agent.sell_paper_holding(symbol, shares, name, reason)
+    return _default_agent().sell_paper_holding(symbol, shares, name, reason)
 
 
 def _paper_trades(name: str = "default", limit: int = 30) -> str:
-    return _agent.paper_trades(name, limit)
+    return _default_agent().paper_trades(name, limit)
 
 
 def _paper_daily_pnl(name: str = "default", limit: int = 30) -> str:
-    return _agent.paper_daily_pnl(name, limit)
+    return _default_agent().paper_daily_pnl(name, limit)
 
 
 def _review_paper_portfolio(
@@ -116,7 +135,7 @@ def _review_paper_portfolio(
     period: str = "6mo",
     name: str = "default",
 ) -> str:
-    return _agent.review_paper_portfolio(symbols, period, name)
+    return _default_agent().review_paper_portfolio(symbols, period, name)
 
 
 def _learn_from_history(
@@ -126,7 +145,9 @@ def _learn_from_history(
     record: bool = True,
     update_skill: bool = True,
 ) -> str:
-    return _agent.learn_from_history(symbol, period, horizon_days, record, update_skill)
+    return _default_agent().learn_from_history(
+        symbol, period, horizon_days, record, update_skill
+    )
 
 
 finance_route_task_tool = Tool(
@@ -464,3 +485,37 @@ finance_tools = [
     finance_review_paper_portfolio_tool,
     finance_learn_from_history_tool,
 ]
+
+
+_FINANCE_METHOD_BY_TOOL = {
+    "finance_route_task": "route_task",
+    "finance_resolve_symbol": "resolve_symbol",
+    "finance_get_quote": "get_quote",
+    "finance_get_price_history": "get_price_history",
+    "finance_get_financials": "get_financials",
+    "finance_get_news": "get_news",
+    "finance_calculate_indicators": "calculate_indicators",
+    "finance_generate_report": "generate_report",
+    "finance_quality_screen": "quality_screen",
+    "finance_compare_stocks": "compare_stocks",
+    "finance_debate_stocks": "debate_stocks",
+    "finance_backtest_strategy": "backtest_strategy",
+    "finance_daily_brief": "daily_brief",
+    "finance_build_paper_portfolio": "build_paper_portfolio",
+    "finance_rebalance_paper_portfolio": "rebalance_paper_portfolio",
+    "finance_mark_paper_portfolio": "mark_paper_portfolio",
+    "finance_show_paper_portfolio": "show_paper_portfolio",
+    "finance_sell_paper_holding": "sell_paper_holding",
+    "finance_paper_trades": "paper_trades",
+    "finance_paper_daily_pnl": "paper_daily_pnl",
+    "finance_review_paper_portfolio": "review_paper_portfolio",
+    "finance_learn_from_history": "learn_from_history",
+}
+
+
+def build_finance_tools(agent: FinanceResearchAgent) -> list[Tool]:
+    """Bind finance tool templates to one application-owned research service."""
+    return [
+        replace(template, run=getattr(agent, _FINANCE_METHOD_BY_TOOL[template.name]))
+        for template in finance_tools
+    ]

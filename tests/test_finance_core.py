@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import date, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -11,16 +12,21 @@ from ticker_dossier.research.data import ProviderChain, ProviderError, SampleDat
 from ticker_dossier.research.models import Candle, Financials, NewsItem, Quote, StockSnapshot, utc_now_iso
 from ticker_dossier.research.history_learning import learn_from_history, render_learning, update_history_learning_skill
 from ticker_dossier.research.paper_portfolio import (
+    PortfolioConflictError,
     construct_portfolio,
+    inspect_account_locations,
     load_account,
     mark_to_market,
+    migrate_account,
     rebalance_portfolio,
     render_account,
+    render_account_locations,
     render_daily_pnl,
     render_portfolio_review,
     render_transactions,
     score_candidates,
     sell_holding,
+    value_account_read_only,
 )
 from ticker_dossier.research.predictions import evaluate_due_predictions, evaluate_prediction, load_predictions, record_prediction, render_learning_report
 from ticker_dossier.research.quality import render_quality_screen
@@ -311,7 +317,7 @@ def test_paper_portfolio_constructs_and_marks_account(tmp_path) -> None:  # noqa
     assert "已实现盈亏" in daily
 
 
-def test_portfolio_migrates_legacy_account_to_persistent_dir(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: ANN001
+def test_portfolio_requires_explicit_legacy_migration(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: ANN001
     import ticker_dossier.research.paper_portfolio as portfolio
 
     legacy_dir = tmp_path / "project" / ".finance_agent"
@@ -324,7 +330,81 @@ def test_portfolio_migrates_legacy_account_to_persistent_dir(tmp_path, monkeypat
     account = portfolio.load_account()
 
     assert account.initial_cash == 123_456
-    assert (persistent_dir / "portfolio_default.json").exists()
+    assert not (persistent_dir / "portfolio_default.json").exists()
+    assert "未自动迁移" in render_account(account)
+
+    result = migrate_account()
+    migrated = portfolio.load_account(create_if_missing=False)
+    payload = json.loads(result.destination.read_text(encoding="utf-8"))
+
+    assert migrated.initial_cash == 123_456
+    assert result.destination == persistent_dir / "portfolio_default.json"
+    assert result.destination.exists()
+    assert result.recovery_backup.exists()
+    assert not (legacy_dir / "portfolio_default.json").exists()
+    assert payload["schema_version"] == 2
+    assert payload["account_id"]
+    assert payload["origin"] == "workspace"
+
+
+def test_portfolio_migration_never_overwrites_a_racing_destination(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # noqa: ANN001
+    import ticker_dossier.research.paper_portfolio as portfolio
+
+    workspace_dir = tmp_path / "project" / ".finance_agent"
+    user_dir = tmp_path / "home" / ".finance-agent" / "portfolios"
+    portfolio.create_account(initial_cash=123_456, base_dir=workspace_dir)
+    source = workspace_dir / "portfolio_default.json"
+    destination = user_dir / "portfolio_default.json"
+    monkeypatch.setattr(portfolio, "LEGACY_PORTFOLIO_DIR", workspace_dir)
+    monkeypatch.setattr(portfolio, "PORTFOLIO_DIR", user_dir)
+
+    def race_target_into_place(_source: str | Path, target: str | Path) -> None:
+        Path(target).write_text("created by another process", encoding="utf-8")
+        raise FileExistsError(str(target))
+
+    monkeypatch.setattr(portfolio.os, "link", race_target_into_place)
+
+    with pytest.raises(PortfolioConflictError, match="迁移期间出现"):
+        migrate_account()
+
+    assert destination.read_text(encoding="utf-8") == "created by another process"
+    assert source.exists()
+    assert not list(user_dir.glob(".*.tmp"))
+
+
+def test_portfolio_conflict_is_visible_for_reads_and_blocks_every_write_path(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # noqa: ANN001
+    import ticker_dossier.research.paper_portfolio as portfolio
+
+    workspace_dir = tmp_path / "project" / ".finance_agent"
+    user_dir = tmp_path / "home" / ".finance-agent" / "portfolios"
+    portfolio.create_account(initial_cash=111_111, base_dir=workspace_dir)
+    portfolio.create_account(initial_cash=222_222, base_dir=user_dir)
+    workspace_path = workspace_dir / "portfolio_default.json"
+    user_path = user_dir / "portfolio_default.json"
+    before = (workspace_path.read_bytes(), user_path.read_bytes())
+    monkeypatch.setattr(portfolio, "LEGACY_PORTFOLIO_DIR", workspace_dir)
+    monkeypatch.setattr(portfolio, "PORTFOLIO_DIR", user_dir)
+
+    locations = inspect_account_locations()
+    account = load_account(create_if_missing=False)
+    status = render_account(account)
+    located = render_account_locations()
+
+    assert locations.conflict is True
+    assert account.initial_cash == 222_222
+    assert "位置警告" in status and "写操作已锁定" in status
+    assert "**冲突**" in located
+    with pytest.raises(PortfolioConflictError, match="写入已拒绝"):
+        mark_to_market(get_quote=lambda symbol: Quote(symbol=symbol, price=1))
+    with pytest.raises(PortfolioConflictError, match="目标.*已存在"):
+        migrate_account()
+    assert (workspace_path.read_bytes(), user_path.read_bytes()) == before
 
 
 def test_portfolio_overwrite_creates_recovery_backup(tmp_path) -> None:  # noqa: ANN001
@@ -446,6 +526,68 @@ def test_portfolio_review_flags_weak_holding_and_replacements(tmp_path) -> None:
     assert "纸面组合诊断" in output
     assert "低置信持仓" in output
     assert "STRONG" in output
+
+
+def test_portfolio_review_revalues_a_copy_and_reports_stale_price_fallback(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # noqa: ANN001
+    import ticker_dossier.research.paper_portfolio as portfolio
+    from ticker_dossier.research.paper_portfolio import Holding, PortfolioAccount, save_account
+
+    user_dir = tmp_path / "home" / "portfolios"
+    workspace_dir = tmp_path / "project" / ".finance_agent"
+    account = PortfolioAccount(
+        name="growth",
+        initial_cash=1_000,
+        cash=100,
+        holdings=[
+            Holding("AAPL", 5, 100, 90, 450, 0.50, "fresh quote test"),
+            Holding("MSFT", 2, 200, 180, 360, 0.40, "fallback test"),
+        ],
+        created_at="2026-08-01T00:00:00Z",
+        updated_at="2026-08-09T00:00:00Z",
+    )
+    path = save_account(account, base_dir=user_dir)
+    before = path.read_bytes()
+    monkeypatch.setattr(portfolio, "PORTFOLIO_DIR", user_dir)
+    monkeypatch.setattr(portfolio, "LEGACY_PORTFOLIO_DIR", workspace_dir)
+
+    def snapshot(symbol: str) -> StockSnapshot:
+        price = None if symbol == "MSFT" else (120 if symbol == "AAPL" else 100)
+        return StockSnapshot(
+            symbol=symbol,
+            quote=Quote(
+                symbol=symbol,
+                price=price,
+                source="STATIC" if price is not None else "UNAVAILABLE",
+                as_of="2026-08-11T08:00:00Z",
+            ),
+            history=[],
+            financials=Financials(symbol=symbol, source="STATIC", as_of="2026-08-11T08:00:00Z"),
+            news=[],
+            indicators={},
+            fetched_at="2026-08-11T08:00:01Z",
+        )
+
+    loaded = load_account("growth", create_if_missing=False)
+    direct_valuation = value_account_read_only(loaded, [snapshot("AAPL"), snapshot("MSFT")])
+    assert loaded.holdings[0].last_price == 90
+    assert direct_valuation.account.holdings[0].last_price == 120
+
+    agent = FinanceResearchAgent(provider=ProviderChain(providers=[]))
+    monkeypatch.setattr(agent, "quick_snapshot", lambda symbol, period="6mo": snapshot(symbol))
+    output = agent.review_paper_portfolio(name="growth")
+    payload_after = json.loads(path.read_text(encoding="utf-8"))
+
+    assert path.read_bytes() == before
+    assert payload_after["holdings"][0]["last_price"] == 90
+    assert "当前净值: 1,060.00" in output
+    assert "累计收益: 60.00 (6.00%)" in output
+    assert "估值行情时间: 2026-08-11T08:00:00Z" in output
+    assert "AAPL | 120.00 | 600.00 | 56.60% | 20.00%" in output
+    assert "MSFT | 180.00 | 360.00 | 33.96% | -10.00% | **缓存回退**" in output
+    assert "陈旧价格回退" in output
 
 
 def test_history_learning_generates_forecast_and_skill(tmp_path) -> None:  # noqa: ANN001

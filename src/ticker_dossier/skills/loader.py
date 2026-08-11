@@ -16,12 +16,20 @@ The loader scans ``skills/*/SKILL.md``, validates frontmatter, and returns an
 on-demand catalog without granting any additional permissions.
 """
 from __future__ import annotations
+
+import os
 import re
 from dataclasses import dataclass
+from importlib.resources.abc import Traversable
 from pathlib import Path
+from typing import TypeAlias
+
+from ticker_dossier.resources import bundled_skills_root
 
 
 SKILL_NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+SKILLS_DIR_ENV = "TICKER_DOSSIER_SKILLS_DIR"
+SkillRoot: TypeAlias = str | Path | Traversable
 
 
 class SkillError(ValueError):
@@ -79,15 +87,47 @@ def parse_skill_md(text: str, path: Path) -> Skill:
     )
 
 
-def load_skills(root: str | Path = "skills") -> list[Skill]:
-    """扫描 root 下所有 SKILL.md。"""
+def load_skills(root: SkillRoot | None = None) -> list[Skill]:
+    """Load validated Skills from an explicit root or the default overlay.
+
+    The default catalog always starts with the read-only Skills bundled in the
+    distribution.  A project ``skills/`` directory (or
+    ``TICKER_DOSSIER_SKILLS_DIR``) can add Skills and override a bundled Skill
+    by declared name.  Passing ``root`` explicitly performs an isolated scan
+    and never falls back to package data.
+    """
+    if root is not None:
+        return _load_skill_root(_coerce_root(root))
+
+    bundled = _load_skill_root(bundled_skills_root())
+    project_root = _default_project_skill_root()
+    if not project_root.is_dir():
+        return bundled
+
+    project = _load_skill_root(project_root)
+    merged = {skill.name: skill for skill in bundled}
+    merged.update({skill.name: skill for skill in project})
+    return sorted(merged.values(), key=lambda skill: skill.name)
+
+
+def _load_skill_root(root: Path | Traversable) -> list[Skill]:
+    """Scan one root without applying the bundled/project overlay."""
     skills: list[Skill] = []
-    for md in sorted(Path(root).glob("*/SKILL.md"), key=lambda path: str(path)):
+    if not root.is_dir():
+        return skills
+    entries = sorted(root.iterdir(), key=lambda item: item.name)
+    for folder in entries:
+        if not folder.is_dir():
+            continue
+        md = folder.joinpath("SKILL.md")
+        if not md.is_file():
+            continue
+        path = _display_path(md)
         try:
             text = md.read_text(encoding="utf-8")
         except (OSError, UnicodeError) as exc:
-            raise SkillFormatError(f"{md}: unable to read Skill: {exc}") from exc
-        skills.append(parse_skill_md(text, md))
+            raise SkillFormatError(f"{path}: unable to read Skill: {exc}") from exc
+        skills.append(parse_skill_md(text, path))
 
     skills.sort(key=lambda skill: skill.name)
     for previous, current in zip(skills, skills[1:]):
@@ -98,7 +138,7 @@ def load_skills(root: str | Path = "skills") -> list[Skill]:
     return skills
 
 
-def read_skill(name: str, root: str | Path = "skills") -> Skill:
+def read_skill(name: str, root: SkillRoot | None = None) -> Skill:
     """Return one validated Skill by its declared frontmatter name."""
     _validate_skill_name(name)
     skills = load_skills(root)
@@ -107,6 +147,20 @@ def read_skill(name: str, root: str | Path = "skills") -> Skill:
             return skill
     available = ", ".join(skill.name for skill in skills) or "none"
     raise SkillNotFoundError(f"unknown Skill '{name}'; available Skills: {available}")
+
+
+def _default_project_skill_root() -> Path:
+    configured = os.environ.get(SKILLS_DIR_ENV, "").strip()
+    return Path(configured).expanduser() if configured else Path.cwd() / "skills"
+
+
+def _coerce_root(root: SkillRoot) -> Path | Traversable:
+    return Path(root) if isinstance(root, (str, Path)) else root
+
+
+def _display_path(resource: Traversable) -> Path:
+    """Return a stable diagnostic path for filesystem-backed wheel resources."""
+    return resource if isinstance(resource, Path) else Path(str(resource))
 
 
 def skills_catalog(skills: list[Skill]) -> str:

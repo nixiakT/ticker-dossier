@@ -15,6 +15,11 @@ from ticker_dossier.integrations.mcp.client import (
     connect_project_mcp,
     register_mcp_tools,
 )
+from ticker_dossier.resources import (
+    bundled_mcp_config,
+    bundled_skills_root,
+    materialize_project_defaults,
+)
 from ticker_dossier.skills.loader import SkillFormatError, SkillNotFoundError, load_skills, read_skill
 from ticker_dossier.runtime.tools import ToolRegistry
 from ticker_dossier.tools.skill_tools import read_skill_tool
@@ -115,6 +120,19 @@ def _trust_project_config(
     monkeypatch.setenv("MINI_OPENCLAW_TRUSTED_MCP_SERVERS", ",".join(tokens))
 
 
+def test_mcp_client_facade_preserves_the_split_module_api() -> None:
+    from ticker_dossier.integrations.mcp import client, config, runtime, transport
+
+    assert client.MCPClient is transport.MCPClient
+    assert client.MCPRPCError is transport.MCPRPCError
+    assert client.MCPConfigError is config.MCPConfigError
+    assert client._mcp_process_env is config._mcp_process_env
+    assert client._mcp_trust_token is config._mcp_trust_token
+    assert client.MCPRuntime is runtime.MCPRuntime
+    assert client.connect_project_mcp is runtime.connect_project_mcp
+    assert client.register_mcp_tools is runtime.register_mcp_tools
+
+
 def test_skills_are_sorted_by_declared_name_and_read_by_name(tmp_path: Path) -> None:
     root = tmp_path / "skills"
     _write_skill(root, "first-folder", "zeta-skill", "# Zeta body")
@@ -157,6 +175,87 @@ def test_read_skill_tool_is_read_only_and_returns_the_body(
 
     assert result == "# Instructions\n\nDo the safe thing."
     assert list(root.rglob("*")) == [root / "demo", root / "demo" / "SKILL.md"]
+
+
+def test_bundled_skills_work_outside_a_source_checkout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    skills = load_skills()
+
+    assert {skill.name for skill in skills} == {
+        "csv-quick-report",
+        "finance-history-learning",
+        "finance-research-evolution",
+        "finance-stock-research",
+        "trace2skill",
+    }
+    assert all("ticker_dossier/resources/skills" in skill.path.as_posix() for skill in skills)
+
+
+def test_project_skills_overlay_bundled_defaults(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "skills"
+    _write_skill(root, "custom", "custom-skill", "# Custom")
+    _write_skill(root, "stock-override", "finance-stock-research", "# Local policy")
+    monkeypatch.chdir(tmp_path)
+
+    skills = {skill.name: skill for skill in load_skills()}
+
+    assert skills["custom-skill"].body == "# Custom"
+    assert skills["finance-stock-research"].body == "# Local policy"
+    assert "trace2skill" in skills
+
+
+def test_materialize_project_defaults_is_non_destructive_by_default(tmp_path: Path) -> None:
+    written = materialize_project_defaults(tmp_path)
+
+    assert tmp_path / ".mcp.json" in written
+    assert tmp_path / "skills" / "finance-stock" / "SKILL.md" in written
+    custom_config = '{"mcpServers": {"custom": {}}}'
+    (tmp_path / ".mcp.json").write_text(custom_config, encoding="utf-8")
+
+    assert materialize_project_defaults(tmp_path) == []
+    assert (tmp_path / ".mcp.json").read_text(encoding="utf-8") == custom_config
+
+    replaced = materialize_project_defaults(tmp_path, overwrite=True)
+    assert tmp_path / ".mcp.json" in replaced
+    assert "finance" in (tmp_path / ".mcp.json").read_text(encoding="utf-8")
+
+
+def test_bundled_defaults_match_the_editable_checkout() -> None:
+    repository = Path(__file__).resolve().parents[1]
+    project_skills = sorted((repository / "skills").glob("*/SKILL.md"))
+
+    assert project_skills
+    for project_skill in project_skills:
+        bundled = bundled_skills_root().joinpath(project_skill.parent.name, "SKILL.md")
+        assert bundled.is_file()
+        assert bundled.read_text(encoding="utf-8") == project_skill.read_text(encoding="utf-8")
+    assert bundled_mcp_config().read_text(encoding="utf-8") == (
+        repository / ".mcp.json"
+    ).read_text(encoding="utf-8")
+
+
+def test_packaged_mcp_template_works_outside_a_source_checkout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    registry = ToolRegistry()
+
+    runtime = connect_project_mcp(registry)
+    try:
+        statuses = {row["name"]: row["status"] for row in runtime.statuses()}
+        assert statuses == {"echo": "connected", "finance": "connected"}
+        assert registry.get("mcp__echo__echo") is not None
+        assert registry.get("mcp__finance__risk_budget") is not None
+    finally:
+        runtime.close()
 
 
 def test_project_mcp_config_registers_multiple_namespaced_servers(

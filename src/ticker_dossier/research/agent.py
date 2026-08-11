@@ -20,14 +20,18 @@ from .paper_portfolio import (
     construct_portfolio,
     load_account,
     mark_to_market,
+    migrate_account,
     rebalance_portfolio,
     render_account,
+    render_account_locations,
     render_daily_pnl,
     render_portfolio_review,
+    render_portfolio_migration,
     render_recommendation,
     render_transactions,
     sell_holding,
     score_candidates,
+    value_account_read_only,
 )
 from .predictions import PredictionRecord, record_prediction, render_prediction_record
 from .quality import render_quality_screen
@@ -360,7 +364,13 @@ class FinanceResearchAgent:
         return render_account(account)
 
     def show_paper_portfolio(self, name: str = "default") -> str:
-        return render_account(load_account(name))
+        return render_account(load_account(name, create_if_missing=False))
+
+    def locate_paper_portfolio(self, name: str = "default") -> str:
+        return render_account_locations(name)
+
+    def migrate_paper_portfolio(self, name: str = "default") -> str:
+        return render_portfolio_migration(migrate_account(name))
 
     def sell_paper_holding(
         self,
@@ -379,10 +389,10 @@ class FinanceResearchAgent:
         return render_account(account) + "\n\n" + render_transactions(account, 10)
 
     def paper_trades(self, name: str = "default", limit: int = 30) -> str:
-        return render_transactions(load_account(name), limit)
+        return render_transactions(load_account(name, create_if_missing=False), limit)
 
     def paper_daily_pnl(self, name: str = "default", limit: int = 30) -> str:
-        return render_daily_pnl(load_account(name), limit)
+        return render_daily_pnl(load_account(name, create_if_missing=False), limit)
 
     def review_paper_portfolio(
         self,
@@ -390,7 +400,7 @@ class FinanceResearchAgent:
         period: str = "6mo",
         name: str = "default",
     ) -> str:
-        account = load_account(name)
+        account = load_account(name, create_if_missing=False)
         candidates = _coerce_symbols(symbols or []) if symbols else []
         current = [holding.symbol for holding in account.holdings]
         fallback = [] if candidates else ["AAPL", "MSFT", "NVDA", "AMD", "GOOGL", "AVGO", "TSLA", "JPM", "V"]
@@ -403,7 +413,8 @@ class FinanceResearchAgent:
             except Exception as exc:
                 failures.append(f"{symbol}: {_compact_error(exc)}")
         scores = score_candidates(snapshots)
-        output = render_portfolio_review(account, scores)
+        valuation = value_account_read_only(account, snapshots)
+        output = render_portfolio_review(account, scores, valuation=valuation)
         if failures:
             output += "\n\n## 数据失败\n" + "\n".join(f"- {item}" for item in failures[:8])
         return output

@@ -1,6 +1,10 @@
 """Tool adapters for finance memory and learning workflows."""
 from __future__ import annotations
 
+from dataclasses import replace
+from functools import partial
+from typing import TYPE_CHECKING
+
 from ticker_dossier.research.evolution import add_memory, extract_learning, render_memories
 from ticker_dossier.research.predictions import (
     evaluation_history_period,
@@ -14,6 +18,9 @@ from ticker_dossier.research.predictions import (
 )
 from ticker_dossier.skills import generate_skill
 from ticker_dossier.runtime.tools import Tool
+
+if TYPE_CHECKING:
+    from ticker_dossier.research.agent import FinanceResearchAgent
 
 
 def _finance_memory_add(
@@ -76,7 +83,24 @@ def _prediction_record(
 ) -> str:
     from ticker_dossier.research.agent import FinanceResearchAgent
 
-    agent = FinanceResearchAgent()
+    return _prediction_record_with_agent(
+        FinanceResearchAgent(),
+        symbol,
+        direction,
+        horizon_days,
+        confidence,
+        thesis,
+    )
+
+
+def _prediction_record_with_agent(
+    agent: FinanceResearchAgent,
+    symbol: str,
+    direction: str,
+    horizon_days: int = 30,
+    confidence: float | None = None,
+    thesis: str = "",
+) -> str:
     record = agent.create_prediction_record(
         symbol=symbol,
         direction=direction,
@@ -96,7 +120,13 @@ def _prediction_list(limit: int = 20) -> str:
 def _prediction_evaluate(include_not_due: bool = False) -> str:
     from ticker_dossier.research.agent import FinanceResearchAgent
 
-    agent = FinanceResearchAgent()
+    return _prediction_evaluate_with_agent(FinanceResearchAgent(), include_not_due)
+
+
+def _prediction_evaluate_with_agent(
+    agent: FinanceResearchAgent,
+    include_not_due: bool = False,
+) -> str:
 
     def get_historical_price(symbol: str, due_at: str) -> tuple[float, str]:
         period = evaluation_history_period(due_at)
@@ -225,3 +255,15 @@ evolution_tools = [
     prediction_evaluate_tool,
     prediction_learn_tool,
 ]
+
+
+def build_evolution_tools(agent: FinanceResearchAgent) -> list[Tool]:
+    """Bind prediction operations to the application-owned research service."""
+    overrides = {
+        "prediction_record": partial(_prediction_record_with_agent, agent),
+        "prediction_evaluate": partial(_prediction_evaluate_with_agent, agent),
+    }
+    return [
+        replace(template, run=overrides.get(template.name, template.run))
+        for template in evolution_tools
+    ]

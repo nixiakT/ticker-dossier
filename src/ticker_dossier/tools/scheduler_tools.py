@@ -1,6 +1,9 @@
 """Tool adapters for scheduled briefs and portfolio updates."""
 from __future__ import annotations
 
+from dataclasses import replace
+from functools import partial
+
 from ticker_dossier.research.agent import FinanceResearchAgent
 from ticker_dossier.integrations.scheduler import add_job, list_jobs, render_jobs, run_due_jobs
 from ticker_dossier.integrations.wechat import send_markdown, send_text
@@ -27,7 +30,11 @@ def _schedule_list() -> str:
 
 
 def _schedule_run_due() -> str:
-    results = run_due_jobs(_run_job)
+    return _schedule_run_due_with_agent(None)
+
+
+def _schedule_run_due_with_agent(agent: FinanceResearchAgent | None) -> str:
+    results = run_due_jobs(partial(_run_job, finance_agent=agent))
     if not results:
         return "No due scheduled jobs."
     lines = ["Scheduled jobs executed:"]
@@ -36,15 +43,17 @@ def _schedule_run_due() -> str:
     return "\n".join(lines)
 
 
-def _run_job(job) -> str:  # noqa: ANN001
+def _run_job(job, *, finance_agent: FinanceResearchAgent | None = None) -> str:  # noqa: ANN001
     if job.kind == "wechat_brief":
+        agent = finance_agent or FinanceResearchAgent()
         symbols = job.payload.get("symbols", "")
-        brief = FinanceResearchAgent().daily_brief(symbols)
+        brief = agent.daily_brief(symbols)
         return send_markdown(brief, title="TickerDossier Brief").status
     if job.kind == "wechat_message":
         return send_text(job.payload.get("message", ""), title="TickerDossier").status
     if job.kind == "wechat_portfolio_mark":
-        report = FinanceResearchAgent().mark_paper_portfolio(job.payload.get("name", "default"))
+        agent = finance_agent or FinanceResearchAgent()
+        report = agent.mark_paper_portfolio(job.payload.get("name", "default"))
         return send_markdown(report, title="TickerDossier Portfolio").status
     return f"unsupported job kind: {job.kind}"
 
@@ -112,3 +121,18 @@ scheduler_tools = [
     schedule_list_tool,
     schedule_run_due_tool,
 ]
+
+
+def build_scheduler_tools(agent: FinanceResearchAgent) -> list[Tool]:
+    """Bind due-job execution to the shared application research service."""
+    return [
+        replace(
+            template,
+            run=(
+                partial(_schedule_run_due_with_agent, agent)
+                if template.name == "schedule_run_due"
+                else template.run
+            ),
+        )
+        for template in scheduler_tools
+    ]

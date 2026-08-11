@@ -5,12 +5,12 @@ import shlex
 from pathlib import Path
 from typing import Any, Iterable
 
-from ticker_dossier.cli.command_catalog import CompletionItem, command_specs
+from ticker_dossier.cli.command_catalog import CompletionItem, command_names
 from ticker_dossier.cli.custom_commands import CustomCommand, load_custom_commands
 from ticker_dossier.skills.loader import Skill, load_skills
 
 
-_BUILTIN_NAMES = {spec.usage.split()[0].removeprefix("/") for spec in command_specs()}
+_BUILTIN_NAMES = set(command_names())
 
 
 class DynamicSlashCommands:
@@ -21,7 +21,7 @@ class DynamicSlashCommands:
         registry: Any,
         *,
         command_roots: Iterable[str | Path] | None = None,
-        skill_root: str | Path = "skills",
+        skill_root: str | Path | None = None,
     ):
         self.registry = registry
         self.command_roots = list(command_roots) if command_roots is not None else None
