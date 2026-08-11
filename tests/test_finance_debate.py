@@ -8,15 +8,15 @@ from typing import Any
 import pytest
 
 from ticker_dossier.research.agent import FinanceResearchAgent
-from ticker_dossier.research.debate_orchestrator import (
+from ticker_dossier.research.debate.orchestrator import (
     MODEL_MODE,
     RULE_MODE,
     ModelDebateOrchestrator,
     build_evidence,
     render_debate_outcomes,
 )
-from ticker_dossier.research.models import Candle, Financials, NewsItem, Quote, StockSnapshot
-from ticker_dossier.research.predictions import load_predictions
+from ticker_dossier.market_data.models import Candle, Financials, NewsItem, Quote, StockSnapshot
+from ticker_dossier.research.learning.predictions import load_predictions
 
 
 class ScriptedDebateBackend:
@@ -271,7 +271,7 @@ def test_debate_fetches_one_snapshot_and_records_validated_judge_prediction(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:  # noqa: ANN001
-    import ticker_dossier.research.predictions as predictions
+    import ticker_dossier.research.learning.predictions as predictions
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(predictions, "PREDICTION_PATH", tmp_path / "predictions.jsonl")

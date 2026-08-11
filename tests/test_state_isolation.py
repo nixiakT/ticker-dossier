@@ -7,10 +7,10 @@ def test_default_persistent_writes_are_confined_to_pytest_tmp_path(tmp_path: Pat
     """Exercise every default writer without touching developer-owned state."""
     import ticker_dossier.integrations.scheduler as scheduler
     import ticker_dossier.integrations.wechat as wechat
-    import ticker_dossier.research.evolution as evolution
-    import ticker_dossier.research.history_learning as history_learning
-    import ticker_dossier.research.paper_portfolio as portfolio
-    import ticker_dossier.research.predictions as predictions
+    import ticker_dossier.research.learning.memory as evolution
+    import ticker_dossier.research.learning.history as history_learning
+    import ticker_dossier.portfolio.service as portfolio
+    import ticker_dossier.research.learning.predictions as predictions
     import ticker_dossier.runtime.memory as runtime_memory
 
     predictions.record_prediction(

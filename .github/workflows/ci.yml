@@ -1,4 +1,4 @@
-name: CI
+name: Checks
 
 on:
   push:
@@ -10,78 +10,78 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: checks-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  quality:
-    name: Quality gates
+  static-analysis:
+    name: Static analysis
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.13"
           cache: pip
           cache-dependency-path: pyproject.toml
-      - name: Install quality tools
-        run: python -m pip install --upgrade pip mypy ruff
+      - name: Install project quality tools
+        run: python -m pip install --upgrade pip ".[dev]"
       - name: Lint
-        run: ruff check src tests evals
-      - name: Guard legacy complexity ceilings
-        run: |
-          ruff check --isolated --select C901 --config "lint.mccabe.max-complexity=39" src/ticker_dossier/research/portfolio/scoring.py
-          ruff check --isolated --select C901 --config "lint.mccabe.max-complexity=31" src/ticker_dossier/research/quality.py
-      - name: Compile all Python modules
-        run: python -m compileall -q src/ticker_dossier evals tests
+        run: python -m ruff check src tests evals scripts
+      - name: Check complexity ratchets
+        run: python scripts/ci/check_complexity.py
+      - name: Compile Python modules
+        run: python -m compileall -q src/ticker_dossier evals tests scripts
       - name: Type-check stable contracts
-        run: >-
-          mypy --strict
-          src/ticker_dossier/bootstrap.py
-          src/ticker_dossier/security.py
-          src/ticker_dossier/runtime
-          src/ticker_dossier/research/protocols.py
-          src/ticker_dossier/research/models.py
-          src/ticker_dossier/research/market_data
-          src/ticker_dossier/llm/deepseek.py
-          src/ticker_dossier/llm/fake.py
-          src/ticker_dossier/integrations/market_data
-          src/ticker_dossier/integrations/mcp
-          src/ticker_dossier/cli/command_types.py
-          src/ticker_dossier/cli/command_catalog.py
-          src/ticker_dossier/cli/custom_commands.py
-          src/ticker_dossier/cli/dynamic_commands.py
-          src/ticker_dossier/cli/ui.py
+        run: python -m mypy
 
   tests:
-    name: Core tests · Python ${{ matrix.python-version }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    name: Tests · ${{ matrix.label }} · Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.13"]
+        include:
+          - os: ubuntu-latest
+            label: Ubuntu
+            python-version: "3.11"
+          - os: ubuntu-latest
+            label: Ubuntu
+            python-version: "3.12"
+          - os: ubuntu-latest
+            label: Ubuntu
+            python-version: "3.13"
+          - os: windows-latest
+            label: Windows
+            python-version: "3.13"
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
           cache-dependency-path: pyproject.toml
-      - name: Install core package and test dependencies
+      - name: Install package and test dependencies
         run: python -m pip install --upgrade pip ".[test]"
       - name: Run test suite
         run: python -m pytest -q
 
   package:
-    name: Build and install wheel
-    needs: [quality, tests]
+    name: Package · wheel smoke
+    needs: [static-analysis, tests]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.13"
           cache: pip
@@ -90,30 +90,19 @@ jobs:
         run: |
           python -m pip install --upgrade pip build
           python -m build
-      - name: Smoke-test the installed wheel outside the checkout
+      - name: Smoke-test the installed wheel
         run: |
           WHEEL_ENV="$RUNNER_TEMP/ticker-dossier-wheel"
           python -m venv "$WHEEL_ENV"
           "$WHEEL_ENV/bin/python" -m pip install --upgrade pip
           "$WHEEL_ENV/bin/python" -m pip install dist/*.whl
           cd "$RUNNER_TEMP"
-          "$WHEEL_ENV/bin/python" - <<'PY'
-          from importlib.metadata import version
-          from ticker_dossier.resources import bundled_mcp_config
-          from ticker_dossier.skills.loader import load_skills
-
-          names = {skill.name for skill in load_skills()}
-          assert "finance-stock-research" in names
-          assert "trace2skill" in names
-          assert bundled_mcp_config().is_file()
-          print(f"ticker-dossier {version('ticker-dossier')}: {len(names)} bundled Skills")
-          PY
-          "$WHEEL_ENV/bin/ticker-dossier" --help
-          NO_COLOR=1 "$WHEEL_ENV/bin/ticker-dossier" --dashboard
-          "$WHEEL_ENV/bin/python" -m ticker_dossier --selfcheck
-          "$WHEEL_ENV/bin/python" -m pip check
-      - uses: actions/upload-artifact@v4
+          "$WHEEL_ENV/bin/python" "$GITHUB_WORKSPACE/scripts/ci/smoke_installed.py"
+      - name: Upload distributions
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ticker-dossier-dist
           path: dist/*
           if-no-files-found: error
+          retention-days: 7

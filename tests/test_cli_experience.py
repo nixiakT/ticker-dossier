@@ -5,7 +5,7 @@ import io
 
 import pytest
 
-from ticker_dossier.cli.command_catalog import (
+from ticker_dossier.cli.commands.catalog import (
     CompletionItem,
     command_completions,
     command_names,
@@ -13,10 +13,10 @@ from ticker_dossier.cli.command_catalog import (
     completion_meta,
     resolve_command,
 )
-from ticker_dossier.cli.commands import CommandRouter
-from ticker_dossier.cli.custom_commands import load_custom_commands
-from ticker_dossier.cli.dynamic_commands import DynamicSlashCommands
-from ticker_dossier.cli.input import (
+from ticker_dossier.cli.commands.router import CommandRouter
+from ticker_dossier.cli.commands.custom import load_custom_commands
+from ticker_dossier.cli.commands.dynamic import DynamicSlashCommands
+from ticker_dossier.cli.terminal.input import (
     MAX_COMPLETION_ROWS,
     InteractiveInput,
     SlashCompletionItem,
@@ -25,7 +25,7 @@ from ticker_dossier.cli.input import (
     _sanitize_hint,
     clean_user_input,
 )
-from ticker_dossier.cli.ui import (
+from ticker_dossier.cli.terminal.ui import (
     DashboardHolding,
     DashboardPortfolio,
     DashboardSnapshot,
@@ -309,7 +309,7 @@ def test_dashboard_empty_portfolio_has_an_explicit_state(monkeypatch) -> None:  
 
 
 def test_dashboard_command_never_creates_a_missing_account() -> None:
-    from ticker_dossier.research.paper_portfolio import inspect_account_locations
+    from ticker_dossier.portfolio.service import inspect_account_locations
 
     class Provider:
         def diagnostics(self) -> list[dict[str, str]]:
@@ -330,12 +330,12 @@ def test_dashboard_command_never_creates_a_missing_account() -> None:
 
 
 def test_dashboard_command_reports_conflict_without_mutating_ledgers() -> None:
-    from ticker_dossier.research.paper_portfolio import (
+    from ticker_dossier.portfolio.service import (
         create_account,
         inspect_account_locations,
         save_account,
     )
-    from ticker_dossier.research.portfolio.models import Holding
+    from ticker_dossier.portfolio.models import Holding
 
     class Provider:
         def diagnostics(self) -> list[dict[str, str]]:
@@ -370,7 +370,7 @@ def test_dashboard_command_reports_conflict_without_mutating_ledgers() -> None:
 
 
 def test_dashboard_contains_a_corrupt_ledger_as_an_error_panel() -> None:
-    from ticker_dossier.research.paper_portfolio import inspect_account_locations
+    from ticker_dossier.portfolio.service import inspect_account_locations
 
     class Provider:
         def diagnostics(self) -> list[dict[str, str]]:
@@ -394,7 +394,7 @@ def test_dashboard_contains_a_corrupt_ledger_as_an_error_panel() -> None:
 
 
 def test_dashboard_keeps_conflict_visible_when_the_active_ledger_is_corrupt() -> None:
-    from ticker_dossier.research.paper_portfolio import inspect_account_locations
+    from ticker_dossier.portfolio.service import inspect_account_locations
 
     class Provider:
         def diagnostics(self) -> list[dict[str, str]]:
@@ -421,8 +421,8 @@ def test_dashboard_keeps_conflict_visible_when_the_active_ledger_is_corrupt() ->
 
 
 def test_dashboard_contains_unexpected_reader_failures(monkeypatch) -> None:  # noqa: ANN001
-    import ticker_dossier.cli.handlers.session as session_handlers
-    from ticker_dossier.research.paper_portfolio import inspect_account_locations
+    import ticker_dossier.cli.commands.handlers.session as session_handlers
+    from ticker_dossier.portfolio.service import inspect_account_locations
 
     class Provider:
         def diagnostics(self) -> list[dict[str, str]]:
@@ -450,7 +450,7 @@ def test_dashboard_contains_unexpected_reader_failures(monkeypatch) -> None:  # 
 
 
 def test_dashboard_rejects_non_finite_ledger_values_without_writing() -> None:
-    from ticker_dossier.research.paper_portfolio import inspect_account_locations
+    from ticker_dossier.portfolio.service import inspect_account_locations
 
     class Provider:
         def diagnostics(self) -> list[dict[str, str]]:
@@ -503,7 +503,7 @@ def test_dashboard_resolves_a_portfolio_dir_loaded_after_module_import(
     tmp_path,
     monkeypatch,
 ) -> None:  # noqa: ANN001
-    import ticker_dossier.research.paper_portfolio as portfolio
+    import ticker_dossier.portfolio.service as portfolio
 
     configured = tmp_path / "late-config" / "portfolios"
     monkeypatch.setattr(portfolio, "PORTFOLIO_DIR", portfolio._IMPORTED_PORTFOLIO_DIR)

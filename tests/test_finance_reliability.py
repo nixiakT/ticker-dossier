@@ -9,24 +9,24 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-from ticker_dossier.integrations.market_data import (
+from ticker_dossier.market_data import (
     AKShareProvider,
     ProviderError,
     SampleDataProvider,
     TushareProvider,
     YahooFinanceProvider,
 )
-from ticker_dossier.integrations.market_data._normalization import _news_keywords, _news_matches
+from ticker_dossier.market_data.providers.normalization import _news_keywords, _news_matches
 from ticker_dossier.research.agent import FinanceResearchAgent
-from ticker_dossier.research.market_data import ProviderChain, enrich_financial_pe
-from ticker_dossier.research.models import Candle, Financials, NewsItem, Quote, StockSnapshot
-from ticker_dossier.research.quality import evaluate_quality_gate, render_quality_screen
-from ticker_dossier.research.resolver import SymbolCandidate, resolve_symbol, resolve_symbol_text
-from ticker_dossier.research.symbols import extract_symbols
+from ticker_dossier.market_data import ProviderChain, enrich_financial_pe
+from ticker_dossier.market_data.models import Candle, Financials, NewsItem, Quote, StockSnapshot
+from ticker_dossier.research.analysis.quality import evaluate_quality_gate, render_quality_screen
+from ticker_dossier.research.discovery.resolver import SymbolCandidate, resolve_symbol, resolve_symbol_text
+from ticker_dossier.market_data.symbols import extract_symbols
 
 
 def test_english_company_name_is_not_treated_as_a_literal_ticker(monkeypatch: pytest.MonkeyPatch) -> None:
-    import ticker_dossier.research.resolver as resolver
+    import ticker_dossier.research.discovery.resolver as resolver
 
     monkeypatch.setattr(
         resolver,
@@ -56,7 +56,7 @@ def test_symbol_extraction_rejects_prompt_words_and_years() -> None:
 
 
 def test_unrelated_search_candidate_is_not_auto_selected(monkeypatch: pytest.MonkeyPatch) -> None:
-    import ticker_dossier.research.resolver as resolver
+    import ticker_dossier.research.discovery.resolver as resolver
 
     monkeypatch.setattr(resolver, "_eastmoney_candidates", lambda query: [])
     monkeypatch.setattr(resolver, "_yahoo_candidates", lambda query: [])

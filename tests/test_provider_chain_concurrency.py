@@ -7,14 +7,14 @@ from typing import Any, Callable
 
 import pytest
 
-from ticker_dossier.integrations.market_data import ProviderError, ProviderTimeoutError
-from ticker_dossier.integrations.market_data.providers.alpha_vantage import AlphaVantageProvider
-from ticker_dossier.integrations.market_data.providers.tushare import TushareProvider
-from ticker_dossier.integrations.market_data.providers.yahoo import YahooFinanceProvider
+from ticker_dossier.market_data import ProviderError, ProviderTimeoutError
+from ticker_dossier.market_data.providers.alpha_vantage import AlphaVantageProvider
+from ticker_dossier.market_data.providers.tushare import TushareProvider
+from ticker_dossier.market_data.providers.yahoo import YahooFinanceProvider
 from ticker_dossier.research.agent import FinanceResearchAgent
-from ticker_dossier.research.market_data import chain as chain_module
-from ticker_dossier.research.market_data.chain import ProviderChain
-from ticker_dossier.research.models import Candle, Financials, NewsItem, Quote
+from ticker_dossier.market_data import chain as chain_module
+from ticker_dossier.market_data.chain import ProviderChain
+from ticker_dossier.market_data.models import Candle, Financials, NewsItem, Quote
 
 
 def _run_threads(*functions: Callable[[], Any]) -> list[Any]:

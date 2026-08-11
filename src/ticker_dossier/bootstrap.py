@@ -50,7 +50,7 @@ def build_debate_backend() -> ManagedDebateBackend:
     intentionally do not attempt to cancel Python worker threads because an
     in-flight HTTP call cannot be safely terminated that way.
     """
-    from ticker_dossier.llm.deepseek import DeepSeekBackend
+    from ticker_dossier.integrations.llm.deepseek import DeepSeekBackend
 
     legacy_timeout = _positive_float_env("FINANCE_DEBATE_MODEL_TIMEOUT_SECONDS", 10.0)
     per_call_timeout = _positive_float_env(
@@ -95,12 +95,12 @@ def build_model_backend(
 ) -> ModelBackend:
     """Select the configured runtime adapter, falling back to the offline fake."""
     try:
-        from ticker_dossier.llm.deepseek import DeepSeekBackend
+        from ticker_dossier.integrations.llm.deepseek import DeepSeekBackend
 
         backend: ModelBackend = DeepSeekBackend()
         return backend
     except Exception as exc:  # noqa: BLE001 - an offline backend is intentional
-        from ticker_dossier.llm.fake import FakeBackend
+        from ticker_dossier.integrations.llm.fake import FakeBackend
 
         if notify is not None:
             safe_error = redact_sensitive_text(f"{type(exc).__name__}: {exc}")
@@ -136,17 +136,17 @@ def build_default_registry(
         connect_project_mcp,
         inspect_project_mcp,
     )
-    from ticker_dossier.tools.evolution_tools import build_evolution_tools
-    from ticker_dossier.tools.finance_tools import build_finance_tools
-    from ticker_dossier.tools.fs import read_tool, write_tool
-    from ticker_dossier.tools.memory_tools import memory_tools
-    from ticker_dossier.tools.more_tools import edit_tool, glob_tool, grep_tool, task_list_tool
-    from ticker_dossier.tools.scheduler_tools import build_scheduler_tools
+    from ticker_dossier.tools.learning import build_evolution_tools
+    from ticker_dossier.tools.research import build_finance_tools
+    from ticker_dossier.tools.filesystem import read_tool, write_tool
+    from ticker_dossier.tools.memory import memory_tools
+    from ticker_dossier.tools.workspace import edit_tool, glob_tool, grep_tool, task_list_tool
+    from ticker_dossier.tools.scheduler import build_scheduler_tools
     from ticker_dossier.tools.shell import bash_tool
-    from ticker_dossier.tools.skill_tools import read_skill_tool
-    from ticker_dossier.tools.trace2skill_tools import trace2skill_tools
-    from ticker_dossier.tools.web_tools import web_tools
-    from ticker_dossier.tools.wechat_tools import wechat_tools
+    from ticker_dossier.tools.skills import read_skill_tool
+    from ticker_dossier.tools.tracing import trace2skill_tools
+    from ticker_dossier.tools.web import web_tools
+    from ticker_dossier.tools.wechat import wechat_tools
 
     owns_services = services is None
     active_services = build_research_services() if services is None else services
@@ -195,7 +195,7 @@ def build_agent(
     approved_tools: Iterable[str] | None = None,
 ) -> AgentLoop:
     """Assemble an ``AgentLoop`` with the configured or offline backend."""
-    from ticker_dossier.research.symbols import extract_symbols, normalize_symbol, to_yahoo_symbol
+    from ticker_dossier.market_data.symbols import extract_symbols, normalize_symbol, to_yahoo_symbol
 
     active_registry = registry if registry is not None else build_default_registry()
     backend = build_model_backend(notify)

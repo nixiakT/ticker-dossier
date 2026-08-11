@@ -132,19 +132,29 @@ flowchart LR
     K["Packaged resources<br/>Skills · MCP defaults"] --> T
 ```
 
-`bootstrap.py` creates one `ResearchServices` instance and publishes it through `ToolRegistry`, so the CLI and Tool adapters share the same research service. `runtime.execution` owns permission checks, reused receipts, and side-effect boundaries. Market-provider and MCP configuration and transport live under `integrations`; the composition root and `ToolRegistry` close application-owned research services, model backends, and MCP runtimes.
+`bootstrap.py` creates one `ResearchServices` instance and publishes it through `ToolRegistry`, so the CLI and Tool adapters share the same research service. `runtime.execution` owns permission checks, reused receipts, and side-effect boundaries. Market models, providers, caching, and multi-source orchestration live together under `market_data`; model backends, MCP, and other external adapters live under `integrations`. The composition root and `ToolRegistry` close application-owned resources.
 
 ```text
 src/ticker_dossier/
-├── cli/handlers/    # Slash-command handlers grouped by capability
-├── runtime/         # Agent loop, executor, context, permissions, contracts
-├── llm/             # Real and offline model adapters
-├── research/        # Selection/merge, analysis, backtests, portfolio
-├── tools/           # Tool adapters
-├── integrations/    # market_data, MCP, HTTP, WeChat, scheduling
-├── resources/       # Skills and MCP defaults bundled in the wheel
-├── skills/          # Skill loading and generation
-└── bootstrap.py     # Composition root
+├── cli/
+│   ├── commands/        # Catalog, router, and capability handlers
+│   └── terminal/        # Input, dashboard, and terminal rendering
+├── runtime/             # Agent loop, executor, context, permissions, contracts
+├── market_data/
+│   └── providers/       # Market models, orchestration, and concrete providers
+├── research/
+│   ├── analysis/        # Indicators, quality gates, frameworks, backtests
+│   ├── debate/          # Rule fallback and model-assisted debate
+│   ├── discovery/       # Symbol resolution and web verification
+│   └── learning/        # Memory, historical calibration, prediction evaluation
+├── portfolio/           # Paper models, scoring, rendering, and safe storage
+├── integrations/
+│   ├── llm/             # Real and offline model backends
+│   └── mcp/             # MCP configuration, transport, and lifecycle
+├── tools/               # Agent Tool adapters
+├── skills/              # Skill loading and generation
+├── resources/           # Skills and MCP defaults bundled in the wheel
+└── bootstrap.py         # Composition root
 ```
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for dependency rules, state migration, and known debt.
@@ -199,25 +209,16 @@ If user-level and workspace storage contain the same account name, reads show th
 
 ```bash
 python -m pip install -e ".[dev,providers]"
-python -m ruff check src tests evals
+python -m ruff check src tests evals scripts
+python scripts/ci/check_complexity.py
 python -m pytest -q
-python -m mypy --strict \
-  src/ticker_dossier/bootstrap.py \
-  src/ticker_dossier/security.py \
-  src/ticker_dossier/runtime \
-  src/ticker_dossier/research/protocols.py \
-  src/ticker_dossier/research/models.py \
-  src/ticker_dossier/research/market_data \
-  src/ticker_dossier/llm/{deepseek,fake}.py \
-  src/ticker_dossier/integrations/market_data \
-  src/ticker_dossier/integrations/mcp \
-  src/ticker_dossier/cli/{command_types,command_catalog,custom_commands,dynamic_commands,ui}.py
-python -m compileall -q src/ticker_dossier evals
+python -m mypy
+python -m compileall -q src/ticker_dossier evals tests scripts
 python -m ticker_dossier --selfcheck
 python -m build
 ```
 
-CI tests Python 3.11/3.13 and runs Ruff (including a complexity gate), strict mypy over selected core packages, dependency-direction tests, and an outside-the-checkout wheel/resource smoke test. Evaluation utilities live in `evals/`, and versioned project Skills in `skills/`; keep credentials, personal state, and generated output untracked.
+CI covers Ubuntu on Python 3.11/3.12/3.13 and Windows on Python 3.13. It runs Ruff, complexity ratchets, strict mypy, dependency-direction tests, and an outside-the-checkout wheel/resource smoke test. The same quality commands run locally; the workflow no longer carries a second file list. Evaluation utilities live in `evals/`, and versioned project Skills in `skills/`; keep credentials, personal state, and generated output untracked.
 
 ## License
 

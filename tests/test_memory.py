@@ -4,8 +4,8 @@ from pathlib import Path
 
 import ticker_dossier.runtime.memory as memory_module
 from ticker_dossier.runtime.memory import KVMemory, Memory
-from ticker_dossier.tools.memory_tools import remember_tool
-from ticker_dossier.cli.commands import CommandRouter
+from ticker_dossier.tools.memory import remember_tool
+from ticker_dossier.cli.commands.router import CommandRouter
 from ticker_dossier.runtime.tools import ToolRegistry
 
 

@@ -38,7 +38,7 @@ def _assert_layer_avoids(layer: str, forbidden: tuple[str, ...]) -> None:
 
 
 def test_architecture_scanner_resolves_relative_imports() -> None:
-    imports = _project_imports(PACKAGE_ROOT / "research" / "debate_orchestrator.py")
+    imports = _project_imports(PACKAGE_ROOT / "research" / "debate" / "orchestrator.py")
 
     assert "ticker_dossier.research.protocols" in imports
 
@@ -49,7 +49,7 @@ def test_runtime_does_not_import_concrete_capabilities() -> None:
         (
             "ticker_dossier.cli",
             "ticker_dossier.integrations",
-            "ticker_dossier.llm",
+            "ticker_dossier.integrations.llm",
             "ticker_dossier.research",
             "ticker_dossier.skills",
             "ticker_dossier.tools",
@@ -60,20 +60,41 @@ def test_runtime_does_not_import_concrete_capabilities() -> None:
 def test_research_does_not_import_outer_adapters_or_concrete_models() -> None:
     _assert_layer_avoids(
         "research",
-        ("ticker_dossier.cli", "ticker_dossier.llm", "ticker_dossier.tools"),
+        ("ticker_dossier.cli", "ticker_dossier.integrations.llm", "ticker_dossier.tools"),
     )
 
 
-def test_market_data_adapters_do_not_import_research_orchestration() -> None:
+def test_market_data_providers_do_not_import_product_workflows() -> None:
     forbidden = (
-        "ticker_dossier.research.data",
-        "ticker_dossier.research.market_data",
+        "ticker_dossier.cli",
+        "ticker_dossier.portfolio",
+        "ticker_dossier.research",
+        "ticker_dossier.runtime",
+        "ticker_dossier.tools",
     )
     violations: list[str] = []
-    adapter_root = PACKAGE_ROOT / "integrations" / "market_data"
+    adapter_root = PACKAGE_ROOT / "market_data" / "providers"
     for path in sorted(adapter_root.rglob("*.py")):
         for imported in sorted(_project_imports(path)):
             if any(imported == prefix or imported.startswith(prefix + ".") for prefix in forbidden):
                 violations.append(f"{path.relative_to(PACKAGE_ROOT)} -> {imported}")
 
-    assert not violations, "market-data adapter depends on orchestration:\n" + "\n".join(violations)
+    assert not violations, "market-data provider depends on a product workflow:\n" + "\n".join(violations)
+
+
+def test_feature_packages_have_one_canonical_home() -> None:
+    removed_paths = (
+        PACKAGE_ROOT / "integrations" / "market_data",
+        PACKAGE_ROOT / "research" / "data.py",
+        PACKAGE_ROOT / "research" / "market_data",
+        PACKAGE_ROOT / "research" / "paper_portfolio.py",
+        PACKAGE_ROOT / "research" / "portfolio",
+    )
+
+    lingering_sources = [
+        path
+        for path in removed_paths
+        if path.is_file() or (path.is_dir() and any(path.rglob("*.py")))
+    ]
+
+    assert not lingering_sources

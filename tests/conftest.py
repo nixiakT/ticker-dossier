@@ -14,10 +14,10 @@ def isolate_persistent_state(
     """Never let a test discover, migrate, or mutate real local application state."""
     import ticker_dossier.integrations.scheduler as scheduler
     import ticker_dossier.integrations.wechat as wechat
-    import ticker_dossier.research.evolution as evolution
-    import ticker_dossier.research.history_learning as history_learning
-    import ticker_dossier.research.paper_portfolio as portfolio
-    import ticker_dossier.research.predictions as predictions
+    import ticker_dossier.research.learning.memory as evolution
+    import ticker_dossier.research.learning.history as history_learning
+    import ticker_dossier.portfolio.service as portfolio
+    import ticker_dossier.research.learning.predictions as predictions
     import ticker_dossier.runtime.memory as runtime_memory
 
     root = tmp_path / "persistent-state"

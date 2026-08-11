@@ -132,19 +132,29 @@ flowchart LR
     K["Packaged resources<br/>Skills · MCP defaults"] --> T
 ```
 
-`bootstrap.py` 创建单一 `ResearchServices` 并放入 `ToolRegistry`，CLI 与 Tool 适配器复用同一个研究服务。`runtime.execution` 统一处理权限、复用回执和副作用边界；市场 Provider 与 MCP 的配置、传输实现在 `integrations`，应用自行创建的研究服务、模型后端与 MCP runtime 则由 composition root 和 `ToolRegistry` 统一关闭。
+`bootstrap.py` 创建单一 `ResearchServices` 并放入 `ToolRegistry`，CLI 与 Tool 适配器复用同一个研究服务。`runtime.execution` 统一处理权限、复用回执和副作用边界；行情模型、Provider、缓存与多源编排集中在 `market_data`，模型后端与 MCP 等外部适配器集中在 `integrations`。应用创建的资源由 composition root 和 `ToolRegistry` 统一关闭。
 
 ```text
 src/ticker_dossier/
-├── cli/handlers/    # 按能力分组的 slash-command handlers
-├── runtime/         # Agent 循环、执行器、上下文、权限与契约
-├── llm/             # 真实模型和离线模型适配器
-├── research/        # 选择/合并、分析、回测、预测与纸面组合
-├── tools/           # Tool 适配器
-├── integrations/    # market_data、MCP、HTTP、微信与调度
-├── resources/       # wheel 内置的 Skills 与 MCP 默认配置
-├── skills/          # Skill 加载和生成逻辑
-└── bootstrap.py     # composition root
+├── cli/
+│   ├── commands/        # catalog、router 与按能力分组的 handlers
+│   └── terminal/        # 输入、Dashboard 与终端渲染
+├── runtime/             # Agent 循环、执行器、上下文、权限与契约
+├── market_data/
+│   └── providers/       # 行情模型、多源编排和具体数据 Provider
+├── research/
+│   ├── analysis/        # 指标、质量门禁、框架与回测
+│   ├── debate/          # 规则回退和模型辩论
+│   ├── discovery/       # 标的解析与网页核验
+│   └── learning/        # 记忆、历史校准与预测评估
+├── portfolio/           # 纸面组合模型、评分、渲染与安全存储
+├── integrations/
+│   ├── llm/             # 真实模型与离线模型后端
+│   └── mcp/             # MCP 配置、传输与生命周期
+├── tools/               # Agent Tool 适配器
+├── skills/              # Skill 加载和生成逻辑
+├── resources/           # wheel 内置 Skills 与 MCP 默认配置
+└── bootstrap.py         # composition root
 ```
 
 设计约束、状态迁移和已知技术债见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
@@ -199,25 +209,16 @@ src/ticker_dossier/
 
 ```bash
 python -m pip install -e ".[dev,providers]"
-python -m ruff check src tests evals
+python -m ruff check src tests evals scripts
+python scripts/ci/check_complexity.py
 python -m pytest -q
-python -m mypy --strict \
-  src/ticker_dossier/bootstrap.py \
-  src/ticker_dossier/security.py \
-  src/ticker_dossier/runtime \
-  src/ticker_dossier/research/protocols.py \
-  src/ticker_dossier/research/models.py \
-  src/ticker_dossier/research/market_data \
-  src/ticker_dossier/llm/{deepseek,fake}.py \
-  src/ticker_dossier/integrations/market_data \
-  src/ticker_dossier/integrations/mcp \
-  src/ticker_dossier/cli/{command_types,command_catalog,custom_commands,dynamic_commands,ui}.py
-python -m compileall -q src/ticker_dossier evals
+python -m mypy
+python -m compileall -q src/ticker_dossier evals tests scripts
 python -m ticker_dossier --selfcheck
 python -m build
 ```
 
-CI 在 Python 3.11/3.13 运行测试，并执行 Ruff（含复杂度门禁）、选定核心包的 strict mypy、依赖方向测试，以及仓库外 wheel 安装/资源自检。评估工具位于 `evals/`，可版本化项目 Skills 位于 `skills/`；提交前请确认没有加入凭据、个人状态或生成目录。
+CI 覆盖 Ubuntu Python 3.11/3.12/3.13 与 Windows Python 3.13，并执行 Ruff、复杂度门禁、strict mypy、依赖方向测试，以及仓库外 wheel 安装/资源自检。相同的质量命令可以直接在本地运行，不在 workflow 中维护第二份文件清单。评估工具位于 `evals/`，可版本化项目 Skills 位于 `skills/`；提交前请确认没有加入凭据、个人状态或生成目录。
 
 ## License
 

@@ -20,13 +20,13 @@ from ticker_dossier.bootstrap import (
     build_agent as assemble_agent,
     build_default_registry,
 )
-from ticker_dossier.cli.command_catalog import command_completions, completion_meta
+from ticker_dossier.cli.commands.catalog import command_completions, completion_meta
 from ticker_dossier.runtime.context import redact_sensitive_text
-from ticker_dossier.cli.dynamic_commands import DynamicSlashCommands
-from ticker_dossier.cli.input import InteractiveInput, clean_user_input
+from ticker_dossier.cli.commands.dynamic import DynamicSlashCommands
+from ticker_dossier.cli.terminal.input import InteractiveInput, clean_user_input
 from ticker_dossier.runtime.prompts import SYSTEM_PROMPT
 from ticker_dossier.telemetry import add_usage, format_usage
-from ticker_dossier.cli.ui import (
+from ticker_dossier.cli.terminal.ui import (
     render_help,
     render_prompt,
     render_status_bar,
@@ -147,7 +147,7 @@ def selfcheck() -> int:
         print(f"[FAIL] 工具注册表：{e}"); ok = False
 
     try:
-        from ticker_dossier.llm.fake import FakeBackend
+        from ticker_dossier.integrations.llm.fake import FakeBackend
         FakeBackend().chat([{"role": "user", "content": "hi"}], tools=[])
         print("[ok] FakeBackend 可用（未配 DEEPSEEK_API_KEY 时的离线占位后端）")
     except Exception as e:  # noqa
@@ -387,7 +387,7 @@ def make_observer(enabled):
 
 
 def interactive() -> int:
-    from ticker_dossier.cli.commands import CommandRouter
+    from ticker_dossier.cli.commands.router import CommandRouter
     from ticker_dossier.runtime.loop import AgentSession, ModelCallError
 
     print(render_welcome())
@@ -507,7 +507,7 @@ def main(argv: list[str] | None = None) -> int:
         print(render_help())
         return 0
     if task.startswith("/"):
-        from ticker_dossier.cli.commands import CommandRouter
+        from ticker_dossier.cli.commands.router import CommandRouter
 
         if task.lower() == "/trace":
             print(TracePrinter(lambda: "compact").render_details())

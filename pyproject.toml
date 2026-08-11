@@ -77,8 +77,8 @@ target-version = "py311"
 select = ["C901", "E4", "E7", "E9", "F"]
 
 [tool.ruff.lint.mccabe]
-# Stable application code is capped here. The two legacy research scoring
-# functions retain explicit, tighter-to-current ceilings in CI until split.
+# Stable application code is capped here. Two older scoring functions retain
+# explicit, tighter-to-current ceilings in the reusable CI check until split.
 max-complexity = 24
 
 # Keep the first CI gate useful without forcing an unrelated repository-wide
@@ -86,20 +86,30 @@ max-complexity = 24
 # other rules in the selected families remain enforced.
 [tool.ruff.lint.per-file-ignores]
 "src/ticker_dossier/cli/main.py" = ["E702"]
-"src/ticker_dossier/research/data.py" = ["F401"]
-"src/ticker_dossier/research/portfolio/scoring.py" = ["C901"]
-"src/ticker_dossier/research/quality.py" = ["C901"]
-"src/ticker_dossier/research/resolver.py" = ["F401"]
-"src/ticker_dossier/research/web.py" = ["F541"]
-"src/ticker_dossier/tools/evolution_tools.py" = ["F541"]
+"src/ticker_dossier/portfolio/scoring.py" = ["C901"]
+"src/ticker_dossier/research/analysis/quality.py" = ["C901"]
+"src/ticker_dossier/research/discovery/resolver.py" = ["F401"]
+"src/ticker_dossier/research/discovery/web.py" = ["F541"]
+"src/ticker_dossier/tools/learning.py" = ["F541"]
 "tests/test_finance_core.py" = ["F401"]
 "tests/test_finance_mcp.py" = ["F401"]
 
 [tool.mypy]
 python_version = "3.11"
+files = [
+  "src/ticker_dossier/bootstrap.py",
+  "src/ticker_dossier/security.py",
+  "src/ticker_dossier/runtime",
+  "src/ticker_dossier/research/protocols.py",
+  "src/ticker_dossier/market_data",
+  "src/ticker_dossier/integrations/llm",
+  "src/ticker_dossier/integrations/mcp",
+  "src/ticker_dossier/cli/commands/models.py",
+  "src/ticker_dossier/cli/commands/catalog.py",
+  "src/ticker_dossier/cli/commands/custom.py",
+  "src/ticker_dossier/cli/commands/dynamic.py",
+  "src/ticker_dossier/cli/terminal/ui.py",
+]
+strict = true
 follow_imports = "skip"
 ignore_missing_imports = true
-check_untyped_defs = true
-warn_return_any = true
-no_implicit_optional = true
-warn_unused_configs = true

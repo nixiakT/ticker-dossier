@@ -100,7 +100,7 @@ class _CountingBackend:
 
 def main() -> int:
     try:
-        from ticker_dossier.llm.deepseek import DeepSeekBackend
+        from ticker_dossier.integrations.llm.deepseek import DeepSeekBackend
 
         backend = DeepSeekBackend()
     except Exception as exc:  # noqa: BLE001

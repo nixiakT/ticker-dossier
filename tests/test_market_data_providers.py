@@ -7,8 +7,9 @@ import time
 
 import httpx
 import pytest
+import ticker_dossier.market_data as market_data_api
 
-from ticker_dossier.integrations.market_data import (
+from ticker_dossier.market_data import (
     AKShareProvider,
     AlphaVantageProvider,
     MarketDataProvider,
@@ -18,9 +19,8 @@ from ticker_dossier.integrations.market_data import (
     TushareProvider,
     YahooFinanceProvider,
 )
-from ticker_dossier.research import data as legacy_data
-from ticker_dossier.research.market_data import ProviderChain
-from ticker_dossier.research.models import Quote
+from ticker_dossier.market_data import ProviderChain
+from ticker_dossier.market_data.models import Quote
 
 
 def test_market_data_package_is_safe_as_the_first_research_related_import() -> None:
@@ -28,14 +28,14 @@ def test_market_data_package_is_safe_as_the_first_research_related_import() -> N
     code = (
         "import sys; "
         f"sys.path.insert(0, {str(source_root)!r}); "
-        "from ticker_dossier.integrations.market_data import SampleDataProvider; "
+        "from ticker_dossier.market_data import SampleDataProvider; "
         "from ticker_dossier.research import FinanceResearchAgent"
     )
 
     subprocess.run([sys.executable, "-I", "-c", code], check=True)
 
 
-def test_research_data_keeps_the_legacy_provider_api_as_identity_reexports() -> None:
+def test_market_data_package_reexports_provider_contracts_by_identity() -> None:
     expected = {
         "MarketDataProvider": MarketDataProvider,
         "ProviderError": ProviderError,
@@ -48,7 +48,7 @@ def test_research_data_keeps_the_legacy_provider_api_as_identity_reexports() -> 
     }
 
     for name, exported in expected.items():
-        assert getattr(legacy_data, name) is exported
+        assert getattr(market_data_api, name) is exported
 
 
 def test_concrete_adapters_satisfy_the_runtime_provider_contract() -> None:

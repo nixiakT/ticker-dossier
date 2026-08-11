@@ -6,19 +6,10 @@ import re
 
 from ticker_dossier.security import redact_sensitive_text
 
-from .backtest import backtest_moving_average_cross, format_backtest, parse_strategy
-from .debate_orchestrator import ModelDebateOrchestrator, render_debate_outcomes
-from .history_learning import (
-    calibrate_momentum_signal,
-    learn_from_history,
-    render_learning,
-    save_learning,
-    update_history_learning_skill,
-)
-from .indicators import calculate_indicators, format_indicators
-from .market_data import ProviderChain, enrich_financial_pe, export_history_csv
-from .models import Candle, Financials, Quote, StockSnapshot, utc_now_iso
-from .paper_portfolio import (
+from ticker_dossier.market_data import ProviderChain, enrich_financial_pe, export_history_csv
+from ticker_dossier.market_data.models import Candle, Financials, Quote, StockSnapshot, utc_now_iso
+from ticker_dossier.market_data.symbols import extract_symbols, normalize_symbol
+from ticker_dossier.portfolio.service import (
     construct_portfolio,
     load_account,
     mark_to_market,
@@ -35,13 +26,23 @@ from .paper_portfolio import (
     score_candidates,
     value_account_read_only,
 )
-from .predictions import PredictionRecord, record_prediction, render_prediction_record
+
+from .analysis.backtest import backtest_moving_average_cross, format_backtest, parse_strategy
+from .analysis.indicators import calculate_indicators, format_indicators
+from .analysis.quality import render_quality_screen
+from .debate.orchestrator import ModelDebateOrchestrator, render_debate_outcomes
+from .discovery.resolver import resolve_symbol, resolve_symbol_text
+from .discovery.web import web_search
+from .learning.history import (
+    calibrate_momentum_signal,
+    learn_from_history,
+    render_learning,
+    save_learning,
+    update_history_learning_skill,
+)
+from .learning.predictions import PredictionRecord, record_prediction, render_prediction_record
 from .protocols import DebateBackend, DebateBackendFactory
-from .quality import render_quality_screen
-from .rendering import render_comparison, render_daily_brief, render_financials, render_stock_report
-from .resolver import resolve_symbol, resolve_symbol_text
-from .symbols import extract_symbols, normalize_symbol
-from .web import web_search
+from .reporting import render_comparison, render_daily_brief, render_financials, render_stock_report
 
 
 def _with_provider_request_deadline(method):  # noqa: ANN001, ANN201

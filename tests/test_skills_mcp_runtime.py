@@ -22,7 +22,7 @@ from ticker_dossier.resources import (
 )
 from ticker_dossier.skills.loader import SkillFormatError, SkillNotFoundError, load_skills, read_skill
 from ticker_dossier.runtime.tools import ToolRegistry
-from ticker_dossier.tools.skill_tools import read_skill_tool
+from ticker_dossier.tools.skills import read_skill_tool
 
 
 SERVER_SOURCE = textwrap.dedent(

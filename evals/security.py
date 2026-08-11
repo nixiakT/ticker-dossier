@@ -11,9 +11,9 @@ from typing import Any
 from ticker_dossier.runtime.loop import AgentLoop
 from ticker_dossier.runtime.prompts import SYSTEM_PROMPT
 from ticker_dossier.runtime.tools import ToolRegistry
-from ticker_dossier.tools.fs import read_tool, write_tool
+from ticker_dossier.tools.filesystem import read_tool, write_tool
 from ticker_dossier.tools.shell import bash_tool
-from ticker_dossier.tools.web_tools import web_fetch_tool
+from ticker_dossier.tools.web import web_fetch_tool
 
 
 INJECTION_FIXTURE = "tests/fixtures/untrusted/prompt-injection.html"

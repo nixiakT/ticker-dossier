@@ -6,14 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from ticker_dossier.integrations.market_data import ProviderError, SampleDataProvider
-from ticker_dossier.integrations.market_data._normalization import _news_matches
+from ticker_dossier.market_data import ProviderError, SampleDataProvider
+from ticker_dossier.market_data.providers.normalization import _news_matches
 from ticker_dossier.research.agent import FinanceResearchAgent, _compact_error
-from ticker_dossier.research.backtest import StrategyConfig, backtest_moving_average_cross, format_backtest, parse_strategy
-from ticker_dossier.research.market_data import ProviderChain
-from ticker_dossier.research.models import Candle, Financials, NewsItem, Quote, StockSnapshot, utc_now_iso
-from ticker_dossier.research.history_learning import learn_from_history, render_learning, update_history_learning_skill
-from ticker_dossier.research.paper_portfolio import (
+from ticker_dossier.research.analysis.backtest import StrategyConfig, backtest_moving_average_cross, format_backtest, parse_strategy
+from ticker_dossier.market_data import ProviderChain
+from ticker_dossier.market_data.models import Candle, Financials, NewsItem, Quote, StockSnapshot, utc_now_iso
+from ticker_dossier.research.learning.history import learn_from_history, render_learning, update_history_learning_skill
+from ticker_dossier.portfolio.service import (
     PortfolioConflictError,
     construct_portfolio,
     inspect_account_locations,
@@ -30,12 +30,12 @@ from ticker_dossier.research.paper_portfolio import (
     sell_holding,
     value_account_read_only,
 )
-from ticker_dossier.research.predictions import evaluate_due_predictions, evaluate_prediction, load_predictions, record_prediction, render_learning_report
-from ticker_dossier.research.quality import render_quality_screen
-from ticker_dossier.research.rendering import render_stock_report
-from ticker_dossier.research.resolver import resolve_symbol
-from ticker_dossier.research.symbols import extract_symbols, normalize_symbol, to_yahoo_symbol
-from ticker_dossier.research.web import web_fetch, web_search
+from ticker_dossier.research.learning.predictions import evaluate_due_predictions, evaluate_prediction, load_predictions, record_prediction, render_learning_report
+from ticker_dossier.research.analysis.quality import render_quality_screen
+from ticker_dossier.research.reporting import render_stock_report
+from ticker_dossier.research.discovery.resolver import resolve_symbol
+from ticker_dossier.market_data.symbols import extract_symbols, normalize_symbol, to_yahoo_symbol
+from ticker_dossier.research.discovery.web import web_fetch, web_search
 from ticker_dossier.security import SecurityError
 
 
@@ -166,7 +166,7 @@ def test_sample_fallback_can_be_disabled(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_default_provider_diagnostics_disable_missing_akshare(monkeypatch) -> None:  # noqa: ANN001
-    import ticker_dossier.research.market_data.configuration as configuration
+    import ticker_dossier.market_data.configuration as configuration
 
     monkeypatch.setattr(configuration, "find_spec", lambda name: None)
     providers, diagnostics, owned = configuration.build_default_providers(False)
@@ -278,7 +278,7 @@ def test_prediction_records_use_history_without_quote_financials_or_news(
 
 
 def test_route_task_portfolio_review_handles_direct_tickers_without_resolver_network(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: ANN001
-    import ticker_dossier.research.paper_portfolio as portfolio
+    import ticker_dossier.portfolio.service as portfolio
     import ticker_dossier.research.agent as finance_agent
 
     monkeypatch.chdir(tmp_path)
@@ -294,7 +294,7 @@ def test_route_task_portfolio_review_handles_direct_tickers_without_resolver_net
 
 
 def test_route_task_builds_paper_portfolio_for_cash_allocation(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: ANN001
-    import ticker_dossier.research.paper_portfolio as portfolio
+    import ticker_dossier.portfolio.service as portfolio
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(portfolio, "PORTFOLIO_DIR", tmp_path / ".finance_agent")
@@ -349,7 +349,7 @@ def test_paper_portfolio_constructs_and_marks_account(tmp_path) -> None:  # noqa
 
 
 def test_portfolio_requires_explicit_legacy_migration(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: ANN001
-    import ticker_dossier.research.paper_portfolio as portfolio
+    import ticker_dossier.portfolio.service as portfolio
 
     legacy_dir = tmp_path / "project" / ".finance_agent"
     persistent_dir = tmp_path / "home" / ".finance-agent" / "portfolios"
@@ -382,7 +382,7 @@ def test_portfolio_migration_never_overwrites_a_racing_destination(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:  # noqa: ANN001
-    import ticker_dossier.research.paper_portfolio as portfolio
+    import ticker_dossier.portfolio.service as portfolio
 
     workspace_dir = tmp_path / "project" / ".finance_agent"
     user_dir = tmp_path / "home" / ".finance-agent" / "portfolios"
@@ -410,7 +410,7 @@ def test_portfolio_conflict_is_visible_for_reads_and_blocks_every_write_path(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:  # noqa: ANN001
-    import ticker_dossier.research.paper_portfolio as portfolio
+    import ticker_dossier.portfolio.service as portfolio
 
     workspace_dir = tmp_path / "project" / ".finance_agent"
     user_dir = tmp_path / "home" / ".finance-agent" / "portfolios"
@@ -439,7 +439,7 @@ def test_portfolio_conflict_is_visible_for_reads_and_blocks_every_write_path(
 
 
 def test_portfolio_overwrite_creates_recovery_backup(tmp_path) -> None:  # noqa: ANN001
-    import ticker_dossier.research.paper_portfolio as portfolio
+    import ticker_dossier.portfolio.service as portfolio
 
     portfolio.create_account(initial_cash=123_456, base_dir=tmp_path)
     portfolio.create_account(initial_cash=999_999, overwrite=True, base_dir=tmp_path)
@@ -450,7 +450,7 @@ def test_portfolio_overwrite_creates_recovery_backup(tmp_path) -> None:  # noqa:
 
 
 def test_daily_pnl_uses_reported_totals_for_recovered_ledger() -> None:
-    from ticker_dossier.research.paper_portfolio import PortfolioAccount
+    from ticker_dossier.portfolio.service import PortfolioAccount
 
     account = PortfolioAccount(
         name="recovered",
@@ -563,8 +563,8 @@ def test_portfolio_review_revalues_a_copy_and_reports_stale_price_fallback(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:  # noqa: ANN001
-    import ticker_dossier.research.paper_portfolio as portfolio
-    from ticker_dossier.research.paper_portfolio import Holding, PortfolioAccount, save_account
+    import ticker_dossier.portfolio.service as portfolio
+    from ticker_dossier.portfolio.service import Holding, PortfolioAccount, save_account
 
     user_dir = tmp_path / "home" / "portfolios"
     workspace_dir = tmp_path / "project" / ".finance_agent"
@@ -634,7 +634,7 @@ def test_history_learning_generates_forecast_and_skill(tmp_path) -> None:  # noq
 
 
 def test_route_task_learns_from_history(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: ANN001
-    import ticker_dossier.research.history_learning as history_learning
+    import ticker_dossier.research.learning.history as history_learning
     import ticker_dossier.research.agent as finance_agent
 
     monkeypatch.chdir(tmp_path)
@@ -727,7 +727,7 @@ def test_web_search_returns_finance_fallback_on_request_error(monkeypatch: pytes
 
 def test_web_fetch_revalidates_every_redirect_target(monkeypatch: pytest.MonkeyPatch) -> None:
     import httpx
-    import ticker_dossier.research.web as web_module
+    import ticker_dossier.research.discovery.web as web_module
 
     class RedirectClient:
         def __enter__(self):  # noqa: ANN204
@@ -967,7 +967,7 @@ def test_route_task_multi_symbol_request_outputs_both() -> None:
 
 
 def test_route_task_records_five_real_baseline_predictions(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: ANN001
-    import ticker_dossier.research.predictions as predictions
+    import ticker_dossier.research.learning.predictions as predictions
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(predictions, "PREDICTION_PATH", tmp_path / "predictions.jsonl")
@@ -1015,7 +1015,7 @@ def test_provider_chain_merges_quality_fundamentals_without_sample() -> None:
 
 
 def test_debate_persists_prediction(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: ANN001
-    import ticker_dossier.research.predictions as predictions
+    import ticker_dossier.research.learning.predictions as predictions
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(predictions, "PREDICTION_PATH", tmp_path / "predictions.jsonl")
@@ -1036,7 +1036,7 @@ def test_due_prediction_evaluation_continues_after_bad_record(tmp_path) -> None:
     good = record_prediction(symbol="GOOD", direction="up", horizon_days=1, confidence=.5, thesis="good", baseline_price=10, path=path)
     bad.due_at = "not-a-date"
     good.due_at = "2020-01-01T00:00:00Z"
-    from ticker_dossier.research.predictions import save_predictions
+    from ticker_dossier.research.learning.predictions import save_predictions
     save_predictions([bad, good], path)
 
     def get_price(symbol: str) -> tuple[float, str]:

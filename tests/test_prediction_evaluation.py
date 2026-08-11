@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from ticker_dossier.cli.commands import CommandRouter
-from ticker_dossier.research.models import Candle
-from ticker_dossier.research.predictions import (
+from ticker_dossier.cli.commands.router import CommandRouter
+from ticker_dossier.market_data.models import Candle
+from ticker_dossier.research.learning.predictions import (
     evaluate_due_predictions,
     evaluation_history_period,
     load_predictions,
@@ -103,7 +103,7 @@ def test_demo_evaluation_uses_latest_quote_only_for_not_due_record(tmp_path) -> 
 
 
 def test_predict_eval_command_uses_history_and_never_latest_quote(tmp_path, monkeypatch) -> None:  # noqa: ANN001
-    import ticker_dossier.research.predictions as predictions
+    import ticker_dossier.research.learning.predictions as predictions
 
     path = tmp_path / "predictions.jsonl"
     monkeypatch.setattr(predictions, "PREDICTION_PATH", path)
@@ -145,7 +145,7 @@ def test_predict_eval_command_uses_history_and_never_latest_quote(tmp_path, monk
 
 
 def test_default_ledger_migrates_from_project_directory(tmp_path, monkeypatch) -> None:  # noqa: ANN001
-    import ticker_dossier.research.predictions as predictions
+    import ticker_dossier.research.learning.predictions as predictions
 
     legacy = tmp_path / "project" / ".finance_agent" / "predictions.jsonl"
     target = tmp_path / "home" / ".finance-agent" / "predictions.jsonl"
@@ -170,7 +170,7 @@ def test_default_ledger_migrates_from_project_directory(tmp_path, monkeypatch) -
 
 
 def test_prediction_path_can_point_at_persistent_volume(tmp_path, monkeypatch) -> None:  # noqa: ANN001
-    import ticker_dossier.research.predictions as predictions
+    import ticker_dossier.research.learning.predictions as predictions
 
     target = tmp_path / "mounted-volume" / "predictions.jsonl"
     monkeypatch.setattr(predictions, "PREDICTION_PATH", predictions.DEFAULT_PREDICTION_PATH)

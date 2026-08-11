@@ -2,30 +2,27 @@ from __future__ import annotations
 
 import threading
 
-from ticker_dossier.integrations.market_data._normalization import _compact_provider_error
-from ticker_dossier.integrations.market_data import SampleDataProvider
-from ticker_dossier.research import data as legacy_data
-from ticker_dossier.research.market_data import cache, configuration, coverage, execution, selection
-from ticker_dossier.research.market_data.chain import ProviderChain
-from ticker_dossier.research.market_data.serialization import export_history_csv
-from ticker_dossier.research.models import Financials, Quote
+from ticker_dossier.market_data.providers.normalization import _compact_provider_error
+from ticker_dossier.market_data import SampleDataProvider
+from ticker_dossier.market_data import cache, configuration, coverage, execution, selection
+from ticker_dossier.market_data.chain import ProviderChain
+from ticker_dossier.market_data.serialization import export_history_csv
+from ticker_dossier.market_data.models import Financials, Quote
 from ticker_dossier.runtime.context import redact_sensitive_text as runtime_redact_sensitive_text
 from ticker_dossier.security import redact_sensitive_text
 
 
-def test_legacy_data_facade_keeps_orchestration_helpers_as_identity_reexports() -> None:
-    expected = {
-        "ProviderChain": ProviderChain,
-        "_collect_provider_calls": execution._collect_provider_calls,
-        "_coverage_error": coverage._coverage_error,
-        "_dedupe_news": selection._dedupe_news,
-        "_financial_field_differences": selection._financial_field_differences,
-        "_positive_env_float": configuration._positive_env_float,
-        "export_history_csv": export_history_csv,
+def test_market_data_orchestration_lives_under_one_package_tree() -> None:
+    modules = {
+        ProviderChain.__module__,
+        execution._collect_provider_calls.__module__,
+        coverage._coverage_error.__module__,
+        selection._dedupe_news.__module__,
+        configuration._positive_env_float.__module__,
+        export_history_csv.__module__,
     }
 
-    for name, exported in expected.items():
-        assert getattr(legacy_data, name) is exported
+    assert all(name.startswith("ticker_dossier.market_data") for name in modules)
 
 
 def test_provider_error_compaction_uses_central_secret_redaction_before_truncation() -> None:
